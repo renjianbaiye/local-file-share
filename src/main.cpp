@@ -5,7 +5,13 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN //让 windows.h 少包含一些不常用内容，加快编译速度，也减少命名冲突
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#include <shellapi.h>
+
 #include "httplib.h"
+#include "qrcodegen.hpp"
 
 #include <windows.h>
 
@@ -19,6 +25,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 #include <stdio.h>
 
@@ -28,8 +35,9 @@ struct Options {
     std::wstring share_dir;
     int port;
     std::string host;
+    bool open_browser;
 
-    Options() : share_dir(L"."), port(8080), host("0.0.0.0") {}
+    Options() : share_dir(L"."), port(8080), host("0.0.0.0"), open_browser(true) {}
 };
 
 struct FileEntry {
@@ -79,6 +87,7 @@ void print_usage() {
         << "  --dir <path>    Directory to share\n"
         << "  --port <port>   HTTP port, default 8080\n"
         << "  --host <host>   Listen host, default 0.0.0.0\n"
+        << "  --no-open       Do not open the browser automatically\n"
         << "  --help          Show this help\n";
 }
 
@@ -130,6 +139,11 @@ bool parse_options(int argc, wchar_t* argv[], Options& options, bool& help_reque
             continue;
         }
 
+        if (arg == L"--no-open") {
+            options.open_browser = false;
+            continue;
+        }
+
         if (arg.size() >= 2 && arg[0] == L'-' && arg[1] == L'-') {
             std::cerr << "Unknown option: " << wide_to_utf8(arg) << "\n";
             return false;
@@ -173,6 +187,448 @@ std::string url_encode(const std::string& input) {
     }
 
     return encoded.str();
+}
+
+bool is_private_ipv4(const std::string& ip) {
+    unsigned int a = 0;
+    unsigned int b = 0;
+    unsigned int c = 0;
+    unsigned int d = 0;
+    if (std::sscanf(ip.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) {
+        return false;
+    }
+
+    return a == 10 ||
+           (a == 172 && b >= 16 && b <= 31) ||
+           (a == 192 && b == 168);
+}
+
+bool is_virtual_adapter(IP_ADAPTER_ADDRESSES* adapter) {
+    if (adapter->FriendlyName != NULL) {
+        std::wstring lower_name = adapter->FriendlyName;
+        std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), [](wchar_t ch) {
+            return static_cast<wchar_t>(std::towlower(ch));
+        });
+        if (lower_name.find(L"hyper-v")    != std::wstring::npos ||
+            lower_name.find(L"wsl")        != std::wstring::npos ||
+            lower_name.find(L"loopback")   != std::wstring::npos ||
+            lower_name.find(L"virtual")    != std::wstring::npos ||
+            lower_name.find(L"vmware")     != std::wstring::npos ||
+            lower_name.find(L"virtualbox") != std::wstring::npos ||
+            lower_name.find(L"vethernet")  != std::wstring::npos) {
+            return true;
+        }
+    }
+    if (adapter->IfType == IF_TYPE_TUNNEL ||
+        adapter->IfType == IF_TYPE_PPP    ||
+        adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+        return true;
+    }
+    return false;
+}
+
+std::string detect_lan_ipv4() {
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG buffer_size = 16 * 1024;
+    std::vector<unsigned char> buffer(buffer_size);
+
+    IP_ADAPTER_ADDRESSES* adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(&buffer[0]);
+    ULONG result = GetAdaptersAddresses(AF_INET, flags, NULL, adapters, &buffer_size);
+    if (result == ERROR_BUFFER_OVERFLOW) {
+        buffer.resize(buffer_size);
+        adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(&buffer[0]);
+        result = GetAdaptersAddresses(AF_INET, flags, NULL, adapters, &buffer_size);
+    }
+
+    if (result != NO_ERROR) {
+        return std::string();
+    }
+
+    std::string physical_fallback;
+    for (IP_ADAPTER_ADDRESSES* adapter = adapters; adapter != NULL; adapter = adapter->Next) {
+        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+            continue;
+        }
+
+        if (is_virtual_adapter(adapter)) {
+            continue;
+        }
+
+        for (IP_ADAPTER_UNICAST_ADDRESS* address = adapter->FirstUnicastAddress;
+             address != NULL;
+             address = address->Next) {
+            if (address->Address.lpSockaddr == NULL ||
+                address->Address.lpSockaddr->sa_family != AF_INET) {
+                continue;
+            }
+
+            sockaddr_in* ipv4 = reinterpret_cast<sockaddr_in*>(address->Address.lpSockaddr);
+            char text[INET_ADDRSTRLEN] = {};
+            if (inet_ntop(AF_INET, &ipv4->sin_addr, text, sizeof(text)) == NULL) {
+                continue;
+            }
+
+            std::string ip = text;
+            if (ip.compare(0, 4, "127.") == 0 || ip.compare(0, 8, "169.254.") == 0) {
+                continue;
+            }
+
+            if (is_private_ipv4(ip)) {
+                return ip;
+            }
+
+            if (physical_fallback.empty()) {
+                physical_fallback = ip;
+            }
+        }
+    }
+
+    if (!physical_fallback.empty()) {
+        return physical_fallback;
+    }
+
+    std::string fallback;
+    for (IP_ADAPTER_ADDRESSES* adapter = adapters; adapter != NULL; adapter = adapter->Next) {
+        if (adapter->OperStatus != IfOperStatusUp || adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
+            continue;
+        }
+
+        for (IP_ADAPTER_UNICAST_ADDRESS* address = adapter->FirstUnicastAddress;
+             address != NULL;
+             address = address->Next) {
+            if (address->Address.lpSockaddr == NULL ||
+                address->Address.lpSockaddr->sa_family != AF_INET) {
+                continue;
+            }
+
+            sockaddr_in* ipv4 = reinterpret_cast<sockaddr_in*>(address->Address.lpSockaddr);
+            char text[INET_ADDRSTRLEN] = {};
+            if (inet_ntop(AF_INET, &ipv4->sin_addr, text, sizeof(text)) == NULL) {
+                continue;
+            }
+
+            std::string ip = text;
+            if (ip.compare(0, 4, "127.") == 0 || ip.compare(0, 8, "169.254.") == 0) {
+                continue;
+            }
+
+            if (is_private_ipv4(ip)) {
+                return ip;
+            }
+
+            if (fallback.empty()) {
+                fallback = ip;
+            }
+        }
+    }
+
+    return fallback;
+}
+
+std::string make_access_url(const std::string& lan_ip, int port) {
+    if (lan_ip.empty()) {
+        return std::string();
+    }
+
+    std::ostringstream url;
+    url << "http://" << lan_ip << ':' << port;
+    return url.str();
+}
+
+void open_browser_after_start(const std::string& url) {
+    std::thread([url]() {
+        Sleep(500);
+        ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }).detach();
+}
+
+int gf_multiply(int x, int y) {
+    int result = 0;
+    while (y != 0) {
+        if ((y & 1) != 0) {
+            result ^= x;
+        }
+        x <<= 1;
+        if ((x & 0x100) != 0) {
+            x ^= 0x11D;
+        }
+        y >>= 1;
+    }
+    return result;
+}
+
+std::vector<int> make_rs_generator(int degree) {
+    std::vector<int> result(degree, 0);
+    result[degree - 1] = 1;
+    int root = 1;
+
+    for (int i = 0; i < degree; ++i) {
+        for (int j = 0; j < degree; ++j) {
+            result[j] = gf_multiply(result[j], root);
+            if (j + 1 < degree) {
+                result[j] ^= result[j + 1];
+            }
+        }
+        root = gf_multiply(root, 2);
+    }
+
+    return result;
+}
+
+std::vector<unsigned char> make_rs_remainder(const std::vector<unsigned char>& data, int degree) {
+    std::vector<int> generator = make_rs_generator(degree);
+    std::vector<int> remainder(degree, 0);
+
+    for (size_t i = 0; i < data.size(); ++i) {
+        int factor = data[i] ^ remainder[0];
+        for (int j = 0; j < degree - 1; ++j) {
+            remainder[j] = remainder[j + 1];
+        }
+        remainder[degree - 1] = 0;
+        for (int j = 0; j < degree; ++j) {
+            remainder[j] ^= gf_multiply(generator[j], factor);
+        }
+    }
+
+    std::vector<unsigned char> result;
+    for (int value : remainder) {
+        result.push_back(static_cast<unsigned char>(value));
+    }
+    return result;
+}
+
+void append_bits(std::vector<bool>& bits, unsigned int value, int count) {
+    for (int i = count - 1; i >= 0; --i) {
+        bits.push_back(((value >> i) & 1) != 0);
+    }
+}
+
+int qr_alphanumeric_value(char ch) {
+    if (ch >= '0' && ch <= '9') return ch - '0';
+    if (ch >= 'A' && ch <= 'Z') return ch - 'A' + 10;
+
+    switch (ch) {
+    case ' ': return 36;
+    case '$': return 37;
+    case '%': return 38;
+    case '*': return 39;
+    case '+': return 40;
+    case '-': return 41;
+    case '.': return 42;
+    case '/': return 43;
+    case ':': return 44;
+    default: return -1;
+    }
+}
+
+std::string make_qr_url_text(const std::string& value) {
+    std::string result = value;
+    for (char& ch : result) {
+        if (ch >= 'a' && ch <= 'z') {
+            ch = static_cast<char>(ch - 'a' + 'A');
+        }
+    }
+    return result;
+}
+
+int make_format_bits(int mask) {
+    int data = (1 << 3) | mask; // Error correction level L.
+    int value = data << 10;
+    int generator = 0x537;
+
+    for (int i = 14; i >= 10; --i) {
+        if (((value >> i) & 1) != 0) {
+            value ^= generator << (i - 10);
+        }
+    }
+
+    return ((data << 10) | value) ^ 0x5412;
+}
+
+void set_qr_module(std::vector<std::vector<int>>& modules,
+                   std::vector<std::vector<bool>>& reserved,
+                   int x,
+                   int y,
+                   bool dark) {
+    if (y < 0 || y >= static_cast<int>(modules.size()) ||
+        x < 0 || x >= static_cast<int>(modules.size())) {
+        return;
+    }
+
+    modules[y][x] = dark ? 1 : 0;
+    reserved[y][x] = true;
+}
+
+void draw_finder(std::vector<std::vector<int>>& modules,
+                 std::vector<std::vector<bool>>& reserved,
+                 int center_x,
+                 int center_y) {
+    for (int dy = -4; dy <= 4; ++dy) {
+        for (int dx = -4; dx <= 4; ++dx) {
+            int distance = std::max(std::abs(dx), std::abs(dy));
+            bool dark = distance == 3 || distance <= 1;
+            set_qr_module(modules, reserved, center_x + dx, center_y + dy, dark);
+        }
+    }
+}
+
+void draw_alignment(std::vector<std::vector<int>>& modules,
+                    std::vector<std::vector<bool>>& reserved,
+                    int center_x,
+                    int center_y) {
+    for (int dy = -2; dy <= 2; ++dy) {
+        for (int dx = -2; dx <= 2; ++dx) {
+            int distance = std::max(std::abs(dx), std::abs(dy));
+            set_qr_module(modules, reserved, center_x + dx, center_y + dy, distance == 2 || distance == 0);
+        }
+    }
+}
+
+std::vector<std::vector<int>> make_qr_modules(const std::string& value) {
+    const int version = 2;
+    const int size = 17 + 4 * version;
+    const int data_codewords = 34;
+    const int ec_codewords = 10;
+    const int mask = 0;
+
+    std::string qr_text = make_qr_url_text(value);
+    std::vector<bool> bits;
+    append_bits(bits, 0x2, 4);
+    append_bits(bits, static_cast<unsigned int>(qr_text.size()), 9);
+    for (size_t i = 0; i < qr_text.size(); i += 2) {
+        int first = qr_alphanumeric_value(qr_text[i]);
+        if (first < 0) {
+            throw std::runtime_error("URL contains characters unsupported by QR alphanumeric mode");
+        }
+
+        if (i + 1 < qr_text.size()) {
+            int second = qr_alphanumeric_value(qr_text[i + 1]);
+            if (second < 0) {
+                throw std::runtime_error("URL contains characters unsupported by QR alphanumeric mode");
+            }
+            append_bits(bits, static_cast<unsigned int>(first * 45 + second), 11);
+        } else {
+            append_bits(bits, static_cast<unsigned int>(first), 6);
+        }
+    }
+
+    int max_bits = data_codewords * 8;
+    int terminator = std::min(4, max_bits - static_cast<int>(bits.size()));
+    append_bits(bits, 0, terminator);
+    while ((bits.size() % 8) != 0) {
+        bits.push_back(false);
+    }
+
+    std::vector<unsigned char> data;
+    for (size_t i = 0; i < bits.size(); i += 8) {
+        unsigned char value_byte = 0;
+        for (int j = 0; j < 8; ++j) {
+            value_byte = static_cast<unsigned char>((value_byte << 1) | (bits[i + j] ? 1 : 0));
+        }
+        data.push_back(value_byte);
+    }
+
+    for (unsigned char pad = 0xEC; static_cast<int>(data.size()) < data_codewords; pad ^= 0xFD) {
+        data.push_back(pad);
+    }
+
+    std::vector<unsigned char> ec = make_rs_remainder(data, ec_codewords);
+    data.insert(data.end(), ec.begin(), ec.end());
+
+    std::vector<std::vector<int>> modules(size, std::vector<int>(size, 0));
+    std::vector<std::vector<bool>> reserved(size, std::vector<bool>(size, false));
+
+    draw_finder(modules, reserved, 3, 3);
+    draw_finder(modules, reserved, size - 4, 3);
+    draw_finder(modules, reserved, 3, size - 4);
+
+    for (int i = 8; i < size - 8; ++i) {
+        set_qr_module(modules, reserved, i, 6, (i % 2) == 0);
+        set_qr_module(modules, reserved, 6, i, (i % 2) == 0);
+    }
+
+    draw_alignment(modules, reserved, 18, 18);
+    set_qr_module(modules, reserved, 8, size - 8, true);
+
+    for (int i = 0; i < 9; ++i) {
+        if (i != 6) {
+            set_qr_module(modules, reserved, 8, i, false);
+            set_qr_module(modules, reserved, i, 8, false);
+        }
+    }
+    for (int i = 0; i < 8; ++i) {
+        set_qr_module(modules, reserved, size - 1 - i, 8, false);
+        set_qr_module(modules, reserved, 8, size - 1 - i, false);
+    }
+
+    std::vector<bool> all_bits;
+    for (unsigned char codeword : data) {
+        append_bits(all_bits, codeword, 8);
+    }
+
+    size_t bit_index = 0;
+    bool upward = true;
+    for (int right = size - 1; right >= 1; right -= 2) {
+        if (right == 6) {
+            --right;
+        }
+
+        for (int vertical = 0; vertical < size; ++vertical) {
+            int y = upward ? size - 1 - vertical : vertical;
+            for (int j = 0; j < 2; ++j) {
+                int x = right - j;
+                if (reserved[y][x]) {
+                    continue;
+                }
+
+                bool bit = bit_index < all_bits.size() ? all_bits[bit_index++] : false;
+                bool masked = bit ^ (((x + y) % 2) == 0);
+                modules[y][x] = masked ? 1 : 0;
+            }
+        }
+
+        upward = !upward;
+    }
+
+    int format = make_format_bits(mask);
+    for (int i = 0; i <= 5; ++i) set_qr_module(modules, reserved, 8, i, ((format >> i) & 1) != 0);
+    set_qr_module(modules, reserved, 8, 7, ((format >> 6) & 1) != 0);
+    set_qr_module(modules, reserved, 8, 8, ((format >> 7) & 1) != 0);
+    set_qr_module(modules, reserved, 7, 8, ((format >> 8) & 1) != 0);
+    for (int i = 9; i < 15; ++i) set_qr_module(modules, reserved, 14 - i, 8, ((format >> i) & 1) != 0);
+    for (int i = 0; i < 8; ++i) set_qr_module(modules, reserved, size - 1 - i, 8, ((format >> i) & 1) != 0);
+    for (int i = 8; i < 15; ++i) set_qr_module(modules, reserved, 8, size - 15 + i, ((format >> i) & 1) != 0);
+
+    return modules;
+}
+
+std::string make_qr_svg(const std::string& value) {
+    qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(value.c_str(), qrcodegen::QrCode::Ecc::LOW);
+    const int quiet_zone = 4;
+    const int module_pixels = 8;
+    const int module_count = qr.getSize();
+    const int viewbox_size = module_count + quiet_zone * 2;
+    std::ostringstream svg;
+
+    svg << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\""
+        << (viewbox_size * module_pixels) << "\" height=\"" << (viewbox_size * module_pixels)
+        << "\" viewBox=\"0 0 "
+        << viewbox_size << ' ' << viewbox_size
+        << "\" shape-rendering=\"crispEdges\">"
+        << "<rect width=\"100%\" height=\"100%\" fill=\"#fff\"/>";
+
+    for (int y = 0; y < module_count; ++y) {
+        for (int x = 0; x < module_count; ++x) {
+            if (qr.getModule(x, y)) {
+                svg << "<rect x=\"" << (x + quiet_zone)
+                    << "\" y=\"" << (y + quiet_zone)
+                    << "\" width=\"1\" height=\"1\" fill=\"#000\"/>";
+            }
+        }
+    }
+
+    svg << "</svg>";
+    return svg.str();
 }
 
 std::string url_decode(const std::string& input) {
@@ -376,7 +832,7 @@ std::wstring parent_path(const std::wstring& path) {
     return normalized.substr(0, pos);
 }
 
-std::string render_directory_page(const std::wstring& root, const std::wstring& current) {
+std::string render_directory_page(const std::wstring& root, const std::wstring& current, const std::string& access_url) {
     std::vector<FileEntry> entries = list_directory(current);
 
     std::sort(entries.begin(), entries.end(), [](const FileEntry& a, const FileEntry& b) {
@@ -399,6 +855,11 @@ std::string render_directory_page(const std::wstring& root, const std::wstring& 
         << "main{max-width:960px;margin:0 auto;padding:24px 16px;}"
         << "h1{font-size:24px;margin:0 0 8px;}"
         << ".path{color:#667085;margin-bottom:20px;word-break:break-all;}"
+        << ".connect{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;background:white;border:1px solid #d9dee7;border-radius:8px;margin:0 0 18px;padding:16px;}"
+        << ".connect img{width:328px;height:328px;display:block;border:1px solid #edf0f5;border-radius:6px;background:#fff;max-width:100%;}"
+        << ".connect-title{font-weight:600;margin-bottom:6px;}"
+        << ".connect-url{font-family:Consolas,monospace;color:#0f766e;word-break:break-all;}"
+        << ".connect-link{display:inline-block;margin-top:10px;color:#2563eb;text-decoration:none;}"
         << ".list{background:white;border:1px solid #d9dee7;border-radius:8px;overflow:hidden;}"
         << ".row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 14px;border-top:1px solid #edf0f5;text-decoration:none;color:inherit;}"
         << ".row:first-child{border-top:0;}"
@@ -406,11 +867,22 @@ std::string render_directory_page(const std::wstring& root, const std::wstring& 
         << ".name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}"
         << ".meta{color:#667085;font-size:13px;}"
         << ".empty{padding:28px 14px;color:#667085;}"
-        << "@media(max-width:640px){main{padding:18px 10px}.row{grid-template-columns:1fr}.meta{margin-left:26px}}"
+        << "@media(max-width:640px){main{padding:18px 10px}.connect{grid-template-columns:1fr}.row{grid-template-columns:1fr}.meta{margin-left:26px}}"
         << "</style></head><body><main>"
         << "<h1>LocalFileShare</h1>"
-        << "<div class=\"path\">/" << html_escape(current_relative) << "</div>"
-        << "<div class=\"list\">";
+        << "<div class=\"path\">/" << html_escape(current_relative) << "</div>";
+
+    if (!access_url.empty() && lowercase_path(full_path(current)) == lowercase_path(full_path(root))) {
+        html
+            << "<section class=\"connect\">"
+            << "<img src=\"/qr.svg?v=2\" alt=\"QR code\">"
+            << "<div><div class=\"connect-title\">手机扫码访问</div>"
+            << "<div class=\"connect-url\">" << html_escape(access_url) << "</div>"
+            << "<a class=\"connect-link\" href=\"/qr\" target=\"_blank\">打开大二维码</a>"
+            << "</div></section>";
+    }
+
+    html << "<div class=\"list\">";
 
     if (lowercase_path(full_path(current)) != lowercase_path(full_path(root))) {
         std::string parent_relative = relative_url_path(root, parent_path(current));
@@ -510,9 +982,41 @@ int wmain(int argc, wchar_t* argv[]) {
     }
 
     httplib::Server server;
+    std::string lan_ip = detect_lan_ipv4();
+    std::string access_url = make_access_url(lan_ip, options.port);
 
     server.Get("/", [&](const httplib::Request&, httplib::Response& res) {
-        res.set_content(render_directory_page(options.share_dir, options.share_dir), "text/html; charset=utf-8");
+        res.set_content(render_directory_page(options.share_dir, options.share_dir, access_url), "text/html; charset=utf-8");
+    });
+
+    server.Get("/qr.svg", [&](const httplib::Request&, httplib::Response& res) {
+        if (access_url.empty()) {
+            send_error(res, 503, "LAN address is unavailable");
+            return;
+        }
+
+        res.set_header("Cache-Control", "no-store, max-age=0");
+        res.set_content(make_qr_svg(access_url), "image/svg+xml; charset=utf-8");
+    });
+
+    server.Get("/qr", [&](const httplib::Request&, httplib::Response& res) {
+        if (access_url.empty()) {
+            send_error(res, 503, "LAN address is unavailable");
+            return;
+        }
+
+        std::ostringstream html;
+        html
+            << "<!doctype html><html lang=\"zh-CN\"><head>"
+            << "<meta charset=\"utf-8\">"
+            << "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            << "<title>LocalFileShare QR</title>"
+            << "<style>body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:#fff;color:#111;display:grid;place-items:center;min-height:100vh;padding:20px;box-sizing:border-box;text-align:center}"
+            << "img{width:328px;height:328px;max-width:90vw;max-height:90vw;image-rendering:pixelated}.url{font-family:Consolas,monospace;margin-top:16px;word-break:break-all}</style>"
+            << "</head><body><main><img src=\"/qr.svg?v=2\" alt=\"QR code\"><div class=\"url\">"
+            << html_escape(access_url)
+            << "</div></main></body></html>";
+        res.set_content(html.str(), "text/html; charset=utf-8");
     });
 
     server.Get(R"(/browse/(.*))", [&](const httplib::Request& req, httplib::Response& res) {
@@ -523,7 +1027,7 @@ int wmain(int argc, wchar_t* argv[]) {
                 return;
             }
 
-            res.set_content(render_directory_page(options.share_dir, target), "text/html; charset=utf-8");
+            res.set_content(render_directory_page(options.share_dir, target, access_url), "text/html; charset=utf-8");
         } catch (const std::exception& ex) {
             send_error(res, 403, ex.what());
         }
@@ -580,8 +1084,13 @@ int wmain(int argc, wchar_t* argv[]) {
     std::cout << "LocalFileShare started.\n"
               << "Shared directory: " << wide_to_utf8(options.share_dir) << "\n"
               << "Local URL: http://127.0.0.1:" << options.port << "\n"
-              << "LAN URL:   http://<your-lan-ip>:" << options.port << "\n"
+              << "LAN URL:   " << (access_url.empty() ? "http://<your-lan-ip>:" + std::to_string(options.port) : access_url) << "\n"
+              << "QR page:   http://127.0.0.1:" << options.port << "\n"
               << "Press Ctrl+C to stop.\n";
+
+    if (options.open_browser) {
+        open_browser_after_start("http://127.0.0.1:" + std::to_string(options.port));
+    }
 
     if (!server.listen(options.host.c_str(), options.port)) {
         std::cerr << "Failed to listen on " << options.host << ':' << options.port << "\n";

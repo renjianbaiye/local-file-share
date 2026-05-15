@@ -42,5 +42,6 @@
 
 # Build directories
 build/
+build-*/
 out/
 .vs/

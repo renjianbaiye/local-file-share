@@ -12,6 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(LocalFileShare
     src/main.cpp
+    third_party/qrcodegen.cpp
 )
 
 target_include_directories(LocalFileShare PRIVATE
@@ -19,7 +20,7 @@ target_include_directories(LocalFileShare PRIVATE
 )
 
 if (WIN32)
-    target_link_libraries(LocalFileShare PRIVATE ws2_32)
+    target_link_libraries(LocalFileShare PRIVATE ws2_32 iphlpapi)
 endif()
 
 if (MSVC)
