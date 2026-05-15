@@ -7,11 +7,11 @@
 第一阶段优先支持：
 
 - Windows 10 / Windows 11
-- C++11
+- C++17
 - CMake
 - Visual Studio 2022 Build Tools 或完整 Visual Studio 2022
 - `cpp-httplib` 作为轻量 HTTP 服务库
-- Win32 API 作为第一版文件系统访问方案
+- `std::filesystem` 作为文件系统访问方案
 
 后续扩展目标：
 
@@ -126,31 +126,21 @@ third_party/httplib.h
 
 ### 3.2 标准库依赖
 
-项目第一版使用 C++11 标准库能力：
+项目第一版使用 C++17 标准库能力：
 
 - `std::string`
 - `std::vector`
-- `std::wstring`
+- `std::filesystem`
 - `std::ostringstream`
-- C 标准文件读写 API
+- `std::ifstream`
 
-第一版在 Windows 上使用 Win32 API 负责：
+其中 `std::filesystem` 负责：
 
 - 遍历共享目录
 - 判断文件 / 文件夹
 - 读取文件大小
 - 处理路径规范化
 - 做路径安全校验
-
-相关 API：
-
-- `GetFullPathNameW`
-- `GetFileAttributesW`
-- `GetFileAttributesExW`
-- `FindFirstFileW`
-- `FindNextFileW`
-- `WideCharToMultiByte`
-- `MultiByteToWideChar`
 
 ## 4. 推荐目录结构
 
@@ -316,8 +306,8 @@ http://192.168.1.23:8080
 
 - Web 页面统一输出 UTF-8
 - HTTP Header 使用 UTF-8 相关声明
-- Windows 文件路径内部优先使用 `std::wstring`
-- 文件系统操作优先使用宽字符 Win32 API
+- Windows 文件路径内部优先使用 `std::filesystem::path`
+- 命令行入口保留 `wmain`，便于接收中文路径参数
 - 页面显示时做 HTML 转义
 - URL 路径参数做 decode 后再映射到真实路径
 
@@ -382,7 +372,7 @@ D:\Share\视频\春节录像.mp4
 
 结论：
 
-当前第一版会改为 Windows + Visual Studio + C++11 路线，不依赖 C++17 `<filesystem>`。Visual Studio 安装器中只需要保留“使用 C++ 的桌面开发”，并确认右侧包含：
+当前第一版使用 Windows + Visual Studio + C++17 路线，依赖 C++17 `<filesystem>`。Visual Studio 安装器中只需要保留“使用 C++ 的桌面开发”，并确认右侧包含：
 
 - MSVC v143 C++ 生成工具
 - Windows 10/11 SDK

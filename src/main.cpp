@@ -3,7 +3,7 @@
 #endif
 
 #define NOMINMAX
-#define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN //让 windows.h 少包含一些不常用内容，加快编译速度，也减少命名冲突
 
 #include "httplib.h"
 
