@@ -45,3 +45,11 @@ build/
 build-*/
 out/
 .vs/
+
+# Node.js / Vue.js
+node_modules/
+dist/
+dist-ssr/
+*.local
+.npm/
+.yarn/
