@@ -53,3 +53,5 @@ dist-ssr/
 *.local
 .npm/
 .yarn/
+*.zip
+.local-backend-dev.cmd
