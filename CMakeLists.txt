@@ -12,10 +12,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(LocalFileShare
     src/main.cpp
+    src/FileManager.cpp
+    src/HtmlRenderer.cpp
+    src/Server.cpp
     third_party/qrcodegen.cpp
 )
 
 target_include_directories(LocalFileShare PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
