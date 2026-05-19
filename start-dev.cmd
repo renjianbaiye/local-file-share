@@ -16,7 +16,7 @@ if not exist "%BACKEND%" (
 echo Starting C++ backend on http://127.0.0.1:8080 ...
 > "%BACKEND_CMD%" echo @echo off
 >> "%BACKEND_CMD%" echo cd /d "%ROOT%"
->> "%BACKEND_CMD%" echo "%BACKEND%" --dir "%SHARE_DIR%" --host 127.0.0.1 --port 8080 --no-open
+>> "%BACKEND_CMD%" echo "%BACKEND%" --dir "%SHARE_DIR%" --host 127.0.0.1 --port 8080 --no-open --no-auth --dev
 start "LocalFileShare Backend :8080" cmd /k "%BACKEND_CMD%"
 
 echo Waiting for backend...

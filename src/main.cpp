@@ -20,6 +20,8 @@ void print_usage() {
         << "  --port <port>   HTTP port, default 8080\n"
         << "  --host <host>   Listen host, default 0.0.0.0\n"
         << "  --no-open       Do not open the browser automatically\n"
+        << "  --no-auth       Disable token authentication (only allowed with 127.0.0.1/localhost)\n"
+        << "  --dev           Dev mode: allow CORS from Vite dev server (127.0.0.1:5173)\n"
         << "  --help          Show this help\n";
 }
 
@@ -76,6 +78,16 @@ bool parse_options(int argc, wchar_t* argv[], Options& options, bool& help_reque
             continue;
         }
 
+        if (arg == L"--no-auth") {
+            options.no_auth = true;
+            continue;
+        }
+
+        if (arg == L"--dev") {
+            options.dev_mode = true;
+            continue;
+        }
+
         if (arg.size() >= 2 && arg[0] == L'-' && arg[1] == L'-') {
             std::cerr << "Unknown option: " << wide_to_utf8(arg) << "\n";
             return false;
@@ -92,6 +104,16 @@ int wmain(int argc, wchar_t* argv[]) {
     bool help_requested = false;
     if (!parse_options(argc, argv, options, help_requested)) {
         return help_requested ? 0 : 1;
+    }
+
+    // --no-auth safety check: only allowed when listening on localhost
+    if (options.no_auth &&
+        options.host != "127.0.0.1" &&
+        options.host != "localhost") {
+        std::cerr << "Error: --no-auth is only allowed when --host is 127.0.0.1 or localhost.\n"
+                  << "Listening on " << options.host << " without authentication is dangerous.\n"
+                  << "Anyone on the same network could access your files.\n";
+        return 1;
     }
 
     try {

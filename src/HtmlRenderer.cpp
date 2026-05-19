@@ -190,7 +190,14 @@ std::string render_directory_page(const std::wstring& root, const std::wstring& 
     }
 
     html
-        << "</section><section class=\"files\"><div class=\"files-head\"><div><div class=\"files-title\">&#20849;&#20139;&#25991;&#20214;</div><div class=\"files-sub\">&#25353;&#25991;&#20214;&#22841;&#20248;&#20808;&#25490;&#21015;&#65292;&#28857;&#20987;&#21363;&#21487;&#36827;&#20837;&#25110;&#19979;&#36733;</div></div><div class=\"pill\">" << entries.size() << " &#20010;&#26465;&#30446;</div></div><div class=\"list\">";
+        << "</section><section class=\"files\"><div class=\"files-head\">"
+        << "<div><div class=\"files-title\">&#20849;&#20139;&#25991;&#20214;</div><div class=\"files-sub\">&#25353;&#25991;&#20214;&#22841;&#20248;&#20808;&#25490;&#21015;&#65292;&#28857;&#20987;&#21363;&#21487;&#36827;&#20837;&#25110;&#19979;&#36733;</div></div>"
+        << "<div style=\"display:flex;gap:10px;align-items:center;\">"
+        << "<div class=\"pill\">" << entries.size() << " &#20010;&#26465;&#30446;</div>"
+        << "<label class=\"button primary\" style=\"cursor:pointer;margin:0;min-height:34px;padding:0 14px;font-size:13px;\">"
+        << "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><polyline points=\"17 8 12 3 7 8\"/><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"15\"/></svg>"
+        << "&#19978;&#20256;&#25991;&#20214;<input type=\"file\" id=\"file-upload\" multiple style=\"display:none;\"></label>"
+        << "</div></div><div class=\"list\">";
 
     if (!is_root_view) {
         std::string parent_relative = relative_url_path(root, parent_path(current));
@@ -214,11 +221,34 @@ std::string render_directory_page(const std::wstring& root, const std::wstring& 
         }
     }
 
-    html << "</div></section></main></body></html>";
+    html << "</div></section></main>"
+         << "<script>"
+         << "document.getElementById('file-upload').addEventListener('change', async function(e) {"
+         << "  const files = e.target.files;"
+         << "  if(files.length === 0) return;"
+         << "  const fd = new FormData();"
+         << "  for(let i=0; i<files.length; i++) fd.append('file', files[i]);"
+         << "  const btn = this.parentElement;"
+         << "  const origText = btn.innerHTML;"
+         << "  btn.innerHTML = '&#19978;&#20256;&#20013;...';"
+         << "  try {"
+         << "    const res = await fetch('/api/upload?path=' + encodeURIComponent('" << json_escape(current_relative) << "'), {"
+         << "      method: 'POST', body: fd"
+         << "    });"
+         << "    if(res.ok) window.location.reload();"
+         << "    else alert('&#19978;&#20256;&#22833;&#36133;: ' + await res.text());"
+         << "  } catch(err) {"
+         << "    alert('&#19978;&#20256;&#20986;&#38169;: ' + err.message);"
+         << "  } finally {"
+         << "    btn.innerHTML = origText;"
+         << "    e.target.value = '';"
+         << "  }"
+         << "});"
+         << "</script></body></html>";
     return html.str();
 }
 
-std::string render_directory_json(const std::wstring& root, const std::wstring& current, const std::string& access_url) {
+std::string render_directory_json(const std::wstring& root, const std::wstring& current, const std::string& access_url, int offset, int limit) {
     std::vector<FileEntry> entries = list_directory(current);
 
     std::sort(entries.begin(), entries.end(), [](const FileEntry& a, const FileEntry& b) {
@@ -239,6 +269,11 @@ std::string render_directory_json(const std::wstring& root, const std::wstring& 
             total_size += entries[i].size;
         }
     }
+
+    int total_entries = static_cast<int>(entries.size());
+    int start_idx = std::min(offset, total_entries);
+    int end_idx = std::min(start_idx + limit, total_entries);
+    bool has_more = end_idx < total_entries;
 
     std::string current_relative = relative_url_path(root, current);
     bool is_root_view = lowercase_path(full_path(current)) == lowercase_path(full_path(root));
@@ -263,13 +298,19 @@ std::string render_directory_json(const std::wstring& root, const std::wstring& 
         << "\"totalBytes\":" << total_size << ","
         << "\"totalSize\":\"" << json_escape(file_size_text(total_size)) << "\""
         << "},"
+        << "\"pagination\":{"
+        << "\"total\":" << total_entries << ","
+        << "\"offset\":" << start_idx << ","
+        << "\"limit\":" << limit << ","
+        << "\"hasMore\":" << (has_more ? "true" : "false")
+        << "},"
         << "\"entries\":[";
 
-    for (size_t i = 0; i < entries.size(); ++i) {
+    for (int i = start_idx; i < end_idx; ++i) {
         const FileEntry& entry = entries[i];
         std::string name = wide_to_utf8(entry.name);
         std::string relative = relative_url_path(root, entry.path);
-        if (i != 0) {
+        if (i != start_idx) {
             json << ",";
         }
         json

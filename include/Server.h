@@ -6,8 +6,10 @@ struct Options {
     int port;
     std::string host;
     bool open_browser;
+    bool no_auth;
+    bool dev_mode;
 
-    Options() : share_dir(L"."), port(8080), host("0.0.0.0"), open_browser(true) {}
+    Options() : share_dir(L"."), port(8080), host("0.0.0.0"), open_browser(true), no_auth(false), dev_mode(false) {}
 };
 
 class Server {

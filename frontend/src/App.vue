@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Smartphone,
   Wifi,
+  Upload,
 } from '@lucide/vue'
 
 const currentPath = ref('')
@@ -23,6 +24,7 @@ const accessUrl = ref('')
 const entries = ref([])
 const stats = ref({ folders: 0, files: 0, totalSize: '0 B' })
 const loading = ref(false)
+const isUploading = ref(false)
 const errorMessage = ref('')
 const query = ref('')
 
@@ -62,6 +64,38 @@ const loadDirectory = async (path = '') => {
     errorMessage.value = '没有连接到 C++ 后端。请先启动 LocalFileShare.exe，并确认 Vite 代理端口是 8080。'
   } finally {
     loading.value = false
+  }
+}
+
+const handleUpload = async (event) => {
+  const files = event.target.files
+  if (!files || files.length === 0) return
+
+  isUploading.value = true
+  errorMessage.value = ''
+
+  const formData = new FormData()
+  for (let i = 0; i < files.length; i++) {
+    formData.append('file', files[i])
+  }
+
+  try {
+    const response = await fetch(`/api/upload?path=${encodeURIComponent(currentPath.value)}`, {
+      method: 'POST',
+      body: formData
+    })
+
+    if (!response.ok) {
+      const msg = await response.text()
+      throw new Error(msg || `HTTP ${response.status}`)
+    }
+    
+    await loadDirectory(currentPath.value)
+  } catch (error) {
+    errorMessage.value = `上传失败: ${error.message}`
+  } finally {
+    isUploading.value = false
+    event.target.value = ''
   }
 }
 
@@ -195,10 +229,17 @@ onMounted(() => loadDirectory())
             <p class="section-kicker">共享目录</p>
             <h2>/{{ currentPath }}</h2>
           </div>
-          <button v-if="parentPath !== null" class="ghost-button" type="button" @click="loadDirectory(parentPath)">
-            返回上级
-            <ChevronRight :size="17" />
-          </button>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <label class="ghost-button" style="cursor: pointer; margin: 0;">
+              <Upload :size="17" />
+              {{ isUploading ? '上传中...' : '上传文件' }}
+              <input type="file" multiple @change="handleUpload" style="display: none;" :disabled="isUploading" />
+            </label>
+            <button v-if="parentPath !== null" class="ghost-button" type="button" @click="loadDirectory(parentPath)" style="margin: 0;">
+              返回上级
+              <ChevronRight :size="17" />
+            </button>
+          </div>
         </header>
 
         <div v-if="errorMessage" class="notice error">

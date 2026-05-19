@@ -24,7 +24,7 @@ target_include_directories(LocalFileShare PRIVATE
 )
 
 if (WIN32)
-    target_link_libraries(LocalFileShare PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(LocalFileShare PRIVATE ws2_32 iphlpapi bcrypt)
 endif()
 
 if (MSVC)
