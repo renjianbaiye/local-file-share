@@ -1,6 +1,9 @@
 #include "Server.h"
+#include "AppOptions.h"
 #include "FileManager.h"
 #include "HtmlRenderer.h"
+#include "PhotoService.h"
+#include "SQLitePhotoRepository.h"
 #include "httplib.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -14,6 +17,7 @@
 #include <cwctype>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <stdio.h>
 #include <thread>
@@ -292,11 +296,159 @@ static void send_error(httplib::Response& res, int status, const std::string& me
     res.set_content(message, "text/plain; charset=utf-8");
 }
 
+static std::string bool_json(bool value) {
+    return value ? "true" : "false";
+}
+
+static void append_optional_int_json(std::ostringstream& out, const char* key, const std::optional<int64_t>& value) {
+    out << ",\"" << key << "\":";
+    if (value.has_value()) {
+        out << *value;
+    } else {
+        out << "null";
+    }
+}
+
+static void append_optional_small_int_json(std::ostringstream& out, const char* key, const std::optional<int>& value) {
+    out << ",\"" << key << "\":";
+    if (value.has_value()) {
+        out << *value;
+    } else {
+        out << "null";
+    }
+}
+
+static std::string photo_json(const PhotoRecord& photo) {
+    std::ostringstream out;
+    out << "{"
+        << "\"id\":" << photo.id
+        << ",\"fileName\":\"" << json_escape(photo.file_name) << "\""
+        << ",\"relativePath\":\"" << json_escape(photo.relative_path) << "\""
+        << ",\"folderPath\":\"" << json_escape(photo.folder_path) << "\""
+        << ",\"mediaType\":\"" << json_escape(photo.media_type) << "\""
+        << ",\"sizeBytes\":" << photo.size_bytes;
+    append_optional_int_json(out, "capturedAt", photo.captured_at);
+    out << ",\"modifiedAt\":" << photo.modified_at;
+    append_optional_small_int_json(out, "width", photo.width);
+    append_optional_small_int_json(out, "height", photo.height);
+    out << ",\"thumbnailStatus\":\"" << json_escape(photo.thumbnail_status) << "\""
+        << ",\"thumbnailUrl\":\"/api/photos/" << photo.id << "/thumbnail\""
+        << ",\"downloadUrl\":\"/download/" << url_encode(photo.relative_path) << "\""
+        << ",\"isFavorite\":" << bool_json(photo.is_favorite)
+        << "}";
+    return out.str();
+}
+
+static std::string scan_status_json(const ScanStatus& status) {
+    std::ostringstream out;
+    out << "{"
+        << "\"status\":\"" << json_escape(status.status) << "\""
+        << ",\"startedAt\":" << status.started_at
+        << ",\"finishedAt\":" << status.finished_at
+        << ",\"totalSeen\":" << status.total_seen
+        << ",\"totalIndexed\":" << status.total_indexed
+        << ",\"totalUpdated\":" << status.total_updated
+        << ",\"totalRemoved\":" << status.total_removed
+        << ",\"errorMessage\":\"" << json_escape(status.error_message) << "\""
+        << "}";
+    return out.str();
+}
+
+static std::vector<std::string> split_csv(const std::string& value) {
+    std::vector<std::string> result;
+    size_t pos = 0;
+    while (pos <= value.size()) {
+        size_t comma = value.find(',', pos);
+        std::string part = comma == std::string::npos ? value.substr(pos) : value.substr(pos, comma - pos);
+        if (!part.empty()) {
+            result.push_back(part);
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        pos = comma + 1;
+    }
+    return result;
+}
+
+static TimelineQuery timeline_query_from_request(const httplib::Request& req) {
+    TimelineQuery query;
+    query.limit = 100;
+    query.missing = false;
+    if (req.has_param("limit")) {
+        try { query.limit = std::stoi(req.get_param_value("limit")); } catch (...) {}
+    }
+    if (req.has_param("cursor")) {
+        query.cursor = req.get_param_value("cursor");
+    }
+    if (req.has_param("folder")) {
+        query.folder_path = req.get_param_value("folder");
+    }
+    if (req.has_param("media")) {
+        query.media_types = split_csv(req.get_param_value("media"));
+    }
+    if (req.has_param("favorite")) {
+        std::string value = req.get_param_value("favorite");
+        if (value == "1" || value == "true") {
+            query.favorite = true;
+        }
+    }
+    return query;
+}
+
+static std::string timeline_json(const std::vector<PhotoRecord>& photos, int requested_limit) {
+    std::ostringstream out;
+    out << "{\"items\":[";
+    for (size_t i = 0; i < photos.size(); ++i) {
+        if (i != 0) {
+            out << ',';
+        }
+        out << photo_json(photos[i]);
+    }
+    out << "],\"nextCursor\":";
+    if (requested_limit > 0 && photos.size() >= static_cast<size_t>(requested_limit)) {
+        const PhotoRecord& last = photos.back();
+        int64_t sort_time = last.captured_at.value_or(last.modified_at);
+        out << "\"" << sort_time << ':' << last.id << "\"";
+    } else {
+        out << "null";
+    }
+    out << "}";
+    return out.str();
+}
+
+static std::string folders_json(const std::vector<FolderRecord>& folders) {
+    std::ostringstream out;
+    out << "{\"items\":[";
+    for (size_t i = 0; i < folders.size(); ++i) {
+        if (i != 0) {
+            out << ',';
+        }
+        const FolderRecord& folder = folders[i];
+        out << "{"
+            << "\"relativePath\":\"" << json_escape(folder.relative_path) << "\""
+            << ",\"photoCount\":" << folder.photo_count
+            << ",\"videoCount\":" << folder.video_count
+            << ",\"rawCount\":" << folder.raw_count;
+        append_optional_int_json(out, "latestCapturedAt", folder.latest_captured_at);
+        append_optional_int_json(out, "latestModifiedAt", folder.latest_modified_at);
+        out << ",\"indexedAt\":" << folder.indexed_at
+            << "}";
+    }
+    out << "]}";
+    return out.str();
+}
+
 // ---------------------------------------------------------------------------
 // Server entry point
 // ---------------------------------------------------------------------------
 
 int Server::run(const Options& options) {
+    ensure_parent_directory(options.photo_db_path);
+    SQLitePhotoRepository photo_repository(options.photo_db_path);
+    photo_repository.initialize();
+    PhotoService photo_service(options.share_dir, photo_repository);
+
     httplib::Server server;
     std::string lan_ip = detect_lan_ipv4();
 
@@ -335,7 +487,7 @@ int Server::run(const Options& options) {
 
                 // Handle preflight
                 if (req.method == "OPTIONS") {
-                    res.set_header("Access-Control-Allow-Methods", "GET, OPTIONS");
+                    res.set_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
                     res.set_header("Access-Control-Allow-Headers", "Content-Type");
                     res.status = 204;
                     return httplib::Server::HandlerResponse::Handled;
@@ -406,6 +558,95 @@ int Server::run(const Options& options) {
                             "application/json; charset=utf-8");
         } catch (const std::exception& ex) {
             send_error(res, 403, ex.what());
+        }
+    });
+
+    server.Post("/api/photos/scan", [&](const httplib::Request&, httplib::Response& res) {
+        ScanStatus status = photo_service.startScanAsync();
+        res.set_content(scan_status_json(status), "application/json; charset=utf-8");
+    });
+
+    server.Get("/api/photos/scan/status", [&](const httplib::Request&, httplib::Response& res) {
+        res.set_content(scan_status_json(photo_service.latestStatus()), "application/json; charset=utf-8");
+    });
+
+    server.Get("/api/photos/timeline", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            TimelineQuery query = timeline_query_from_request(req);
+            std::vector<PhotoRecord> photos = photo_repository.listTimeline(query);
+            res.set_content(timeline_json(photos, query.limit <= 0 ? 100 : std::min(query.limit, 500)),
+                            "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Get("/api/photos/folders", [&](const httplib::Request&, httplib::Response& res) {
+        try {
+            res.set_content(folders_json(photo_repository.listFolders()), "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Post(R"(/api/photos/(\d+)/favorite)", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            bool favorite = req.body.find("true") != std::string::npos || req.body.find("\"favorite\":1") != std::string::npos;
+            photo_repository.toggleFavorite(id, favorite);
+            res.set_content("{\"status\":\"ok\",\"favorite\":" + bool_json(favorite) + "}",
+                            "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Get(R"(/api/photos/(\d+)/thumbnail)", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            PhotoRecord photo = photo_repository.getPhoto(std::stoll(req.matches[1]));
+            if (photo.media_type != "image" || photo.missing) {
+                send_error(res, 404, "Thumbnail is not available");
+                return;
+            }
+
+            std::wstring target = resolve_request_path(options.share_dir, photo.relative_path);
+            if (!is_regular_file(target)) {
+                send_error(res, 404, "File not found");
+                return;
+            }
+
+            unsigned long long file_size = get_file_size(target);
+            res.set_content_provider(
+                static_cast<size_t>(file_size),
+                guess_mime_type(target),
+                [target](size_t offset, size_t length, httplib::DataSink& sink) {
+                    FILE* file = NULL;
+                    if (_wfopen_s(&file, target.c_str(), L"rb") != 0 || file == NULL) {
+                        return false;
+                    }
+                    if (_fseeki64(file, static_cast<__int64>(offset), SEEK_SET) != 0) {
+                        fclose(file);
+                        return false;
+                    }
+                    char buffer[8192];
+                    bool ok = true;
+                    while (length > 0) {
+                        size_t to_read = std::min(sizeof(buffer), length);
+                        size_t read_count = fread(buffer, 1, to_read, file);
+                        if (read_count == 0) {
+                            break;
+                        }
+                        if (!sink.write(buffer, read_count)) {
+                            ok = false;
+                            break;
+                        }
+                        length -= read_count;
+                    }
+                    fclose(file);
+                    return ok;
+                });
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
         }
     });
 
@@ -577,6 +818,7 @@ int Server::run(const Options& options) {
             if (!upload_ok) {
                 send_error(res, 500, error_msg.empty() ? "Upload failed" : error_msg);
             } else {
+                photo_service.startScanAsync();
                 res.set_content("{\"status\":\"ok\"}", "application/json; charset=utf-8");
             }
         } catch (const std::exception& ex) {
@@ -589,7 +831,8 @@ int Server::run(const Options& options) {
     // -----------------------------------------------------------------------
 
     std::cout << "LocalFileShare started.\n"
-              << "Shared directory: " << wide_to_utf8(options.share_dir) << "\n";
+              << "Shared directory: " << wide_to_utf8(options.share_dir) << "\n"
+              << "Photo database: " << wide_to_utf8(options.photo_db_path) << "\n";
 
     if (!options.no_auth) {
         std::cout << "Access token: " << token << "\n";
