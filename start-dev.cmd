@@ -4,19 +4,55 @@ setlocal
 set ROOT=%~dp0
 if "%~1"=="" (
   if "%SHARE_DIR%"=="" (
-    set SHARE_DIR=D:\Share
+    set SHARE_DIR=C:\back\test
   )
 ) else (
   set SHARE_DIR=%~1
 )
 
-set BACKEND=%ROOT%build\Debug\LocalFileShare.exe
+set BACKEND=%ROOT%build-vs\Debug\LocalFileShare.exe
 set BACKEND_CMD=%ROOT%.local-backend-dev.cmd
+set BACKEND_HOST=0.0.0.0
+set FRONTEND_HOST=0.0.0.0
 set BACKEND_URL=http://127.0.0.1:8080/api/list
+set LAN_IP=127.0.0.1
+set NODE_EXE=node.exe
+set NPM_CLI=
+set AUTH_TOKEN=
+
+if exist "C:\Program Files\nodejs\node.exe" set "PATH=C:\Program Files\nodejs;%PATH%"
+
+for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "-join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Minimum 0 -Maximum 16) })"`) do set AUTH_TOKEN=%%i
+
+for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /R /C:"IPv4.*192\." /C:"IPv4.*10\." /C:"IPv4.*172\."') do (
+  set LAN_IP=%%i
+  goto lan_ip_found
+)
+:lan_ip_found
+set LAN_IP=%LAN_IP: =%
+
+where node.exe >nul 2>nul
+if errorlevel 1 (
+  if exist "C:\Program Files\nodejs\node.exe" (
+    set NODE_EXE=C:\Program Files\nodejs\node.exe
+  )
+)
+
+if exist "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" (
+  set NPM_CLI=C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+) else (
+  where npm.cmd >nul 2>nul
+  if not errorlevel 1 set NPM_CLI=npm.cmd
+)
 
 if not exist "%BACKEND%" (
   echo Backend executable not found: %BACKEND%
-  echo Please build the C++ project first: cmake --build build
+  echo Please build the C++ project first: cmake --build build-vs --config Debug
+  exit /b 1
+)
+
+if "%NPM_CLI%"=="" (
+  echo npm was not found. Please install Node.js LTS, then reopen this terminal.
   exit /b 1
 )
 
@@ -32,17 +68,17 @@ if not exist "%SHARE_DIR%" (
   exit /b 1
 )
 
-echo Starting C++ backend on http://127.0.0.1:8080 ...
+echo Starting C++ backend on http://%LAN_IP%:8080 ...
 echo Shared directory: %SHARE_DIR%
 echo Photo database: %ROOT%photos.db
 > "%BACKEND_CMD%" echo @echo off
 >> "%BACKEND_CMD%" echo cd /d "%ROOT%"
->> "%BACKEND_CMD%" echo "%BACKEND%" --dir "%SHARE_DIR%" --host 127.0.0.1 --port 8080 --no-open --no-auth --dev --photo-db "%ROOT%photos.db"
+>> "%BACKEND_CMD%" echo "%BACKEND%" --dir "%SHARE_DIR%" --host %BACKEND_HOST% --port 8080 --no-open --dev --token %AUTH_TOKEN% --photo-db "%ROOT%photos.db"
 start "LocalFileShare Backend :8080" cmd /k "%BACKEND_CMD%"
 
 echo Waiting for backend...
 for /l %%i in (1,1,30) do (
-  powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri '%BACKEND_URL%' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -eq 200) { exit 0 } } catch { exit 1 }"
+  powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri '%BACKEND_URL%' -UseBasicParsing -TimeoutSec 1; if ($r.StatusCode -eq 200) { exit 0 } } catch { if ($_.Exception.Response -and ([int]$_.Exception.Response.StatusCode -eq 401 -or [int]$_.Exception.Response.StatusCode -eq 403)) { exit 0 }; exit 1 }"
   if not errorlevel 1 goto backend_ready
   timeout /t 1 /nobreak >nul
 )
@@ -53,8 +89,14 @@ exit /b 1
 
 :backend_ready
 echo Backend is ready.
-echo Album API: http://127.0.0.1:8080/api/photos/timeline
-echo Vite UI:   http://127.0.0.1:5173
+echo Album API: http://%LAN_IP%:8080/api/photos/timeline
+echo Vite UI:   http://%LAN_IP%:5173
+echo Auth URL:  http://%LAN_IP%:5173?token=%AUTH_TOKEN%
 
 cd /d "%ROOT%frontend"
-npm.cmd run dev -- --port 5173 --strictPort
+set "VITE_LFS_TOKEN=%AUTH_TOKEN%"
+if /i "%NPM_CLI%"=="npm.cmd" (
+  npm.cmd run dev -- --port 5173 --strictPort
+) else (
+  "%NODE_EXE%" "%NPM_CLI%" run dev -- --port 5173 --strictPort
+)

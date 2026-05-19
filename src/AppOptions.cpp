@@ -21,6 +21,7 @@ void print_usage() {
         << "  --port <port>      HTTP port, default 8080\n"
         << "  --host <host>      Listen host, default 0.0.0.0\n"
         << "  --photo-db <path>  SQLite photo album database path\n"
+        << "  --token <token>    Use a specific access token instead of generating one\n"
         << "  --no-open          Do not open the browser automatically\n"
         << "  --no-auth          Disable token authentication (only allowed with 127.0.0.1/localhost)\n"
         << "  --dev              Dev mode: allow CORS from Vite dev server (127.0.0.1:5173)\n"
@@ -81,6 +82,15 @@ bool parse_options(int argc, wchar_t* argv[], Options& options, bool& help_reque
                 return false;
             }
             options.photo_db_path = argv[++i];
+            continue;
+        }
+
+        if (arg == L"--token") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --token\n";
+                return false;
+            }
+            options.auth_token = wide_to_utf8(argv[++i]);
             continue;
         }
 

@@ -90,6 +90,21 @@ const indexedTotal = computed(() => {
 
 const apiPath = (path = '') => `/api/list${path ? `?path=${encodeURIComponent(path)}` : ''}`
 
+const authenticateFromUrl = async () => {
+  const url = new URL(window.location.href)
+  const urlToken = url.searchParams.get('token')
+  const token = urlToken || import.meta.env.VITE_LFS_TOKEN
+  if (!token) return
+
+  const response = await fetch(`/api/auth?token=${encodeURIComponent(token)}`)
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+  if (urlToken) {
+    url.searchParams.delete('token')
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`)
+  }
+}
+
 const loadDirectory = async (path = '') => {
   fileLoading.value = true
   fileError.value = ''
@@ -305,9 +320,15 @@ const formatBytes = (bytes) => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadDirectory(), reloadAlbum()])
-  if (scanStatus.value.status === 'scanning') {
-    pollScanStatus()
+  try {
+    await authenticateFromUrl()
+    await Promise.all([loadDirectory(), reloadAlbum()])
+    if (scanStatus.value.status === 'scanning') {
+      pollScanStatus()
+    }
+  } catch (error) {
+    fileError.value = `Authentication failed: ${error.message}`
+    albumError.value = `Authentication failed: ${error.message}`
   }
 })
 </script>

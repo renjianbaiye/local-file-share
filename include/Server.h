@@ -9,8 +9,9 @@ struct Options {
     bool open_browser;
     bool no_auth;
     bool dev_mode;
+    std::string auth_token;
 
-    Options() : share_dir(L"."), photo_db_path(), port(8080), host("0.0.0.0"), open_browser(true), no_auth(false), dev_mode(false) {}
+    Options() : share_dir(L"."), photo_db_path(), port(8080), host("0.0.0.0"), open_browser(true), no_auth(false), dev_mode(false), auth_token() {}
 };
 
 class Server {

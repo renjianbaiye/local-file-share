@@ -24,6 +24,18 @@ int main() {
     assert(!help_requested);
     assert(parsed.photo_db_path == L"D:\\tmp\\album.db");
 
+    Options token_parsed;
+    bool token_help_requested = false;
+    wchar_t* token_argv[] = {
+        mutable_arg(L"LocalFileShare.exe"),
+        mutable_arg(L"--token"),
+        mutable_arg(L"abc123")
+    };
+
+    assert(parse_options(3, token_argv, token_parsed, token_help_requested));
+    assert(!token_help_requested);
+    assert(token_parsed.auth_token == "abc123");
+
     std::filesystem::path temp_root = std::filesystem::temp_directory_path() / L"lfs-app-options-test";
     std::filesystem::remove_all(temp_root);
     SetEnvironmentVariableW(L"LOCALAPPDATA", temp_root.wstring().c_str());

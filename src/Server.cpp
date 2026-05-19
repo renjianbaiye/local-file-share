@@ -455,16 +455,22 @@ int Server::run(const Options& options) {
     // Generate auth token (empty string when auth is disabled)
     std::string token;
     if (!options.no_auth) {
-        token = generate_token();
+        token = options.auth_token.empty() ? generate_token() : options.auth_token;
     }
 
     // Build URLs
     std::string lan_base_url = make_base_url(lan_ip, options.port);
     std::string local_base_url = make_base_url("127.0.0.1", options.port);
+    std::string frontend_lan_base_url = options.dev_mode ? make_base_url(lan_ip, 5173) : std::string();
+    std::string frontend_local_base_url = options.dev_mode ? make_base_url("127.0.0.1", 5173) : std::string();
 
     // access_url passed to render functions: includes token so QR/copy-link work
-    std::string access_url = append_token_to_url(lan_base_url, token);
-    std::string local_url = append_token_to_url(local_base_url, token);
+    std::string access_url = options.dev_mode && !frontend_lan_base_url.empty()
+        ? frontend_lan_base_url
+        : append_token_to_url(lan_base_url, token);
+    std::string local_url = options.dev_mode && !frontend_local_base_url.empty()
+        ? frontend_local_base_url
+        : append_token_to_url(local_base_url, token);
 
     // -----------------------------------------------------------------------
     // Pre-routing: security headers + CORS + authentication
@@ -496,14 +502,20 @@ int Server::run(const Options& options) {
 
             // 3. Authentication (skip when --no-auth)
             if (!options.no_auth) {
-                // Auth entry point: GET /?token=xxx (strictly path == "/" with token param)
-                if (req.path == "/" && req.has_param("token")) {
+                // Auth entry points:
+                // - GET /?token=xxx for the built-in backend page.
+                // - GET /api/auth?token=xxx for the Vite dev UI proxy.
+                if ((req.path == "/" || req.path == "/api/auth") && req.has_param("token")) {
                     std::string provided = req.get_param_value("token");
                     if (provided == token) {
                         res.set_header("Set-Cookie",
                             "lfs_token=" + token + "; Path=/; HttpOnly; SameSite=Strict");
-                        res.set_header("Location", "/");
-                        res.status = 302;
+                        if (req.path == "/api/auth") {
+                            res.set_content("{\"status\":\"ok\"}", "application/json; charset=utf-8");
+                        } else {
+                            res.set_header("Location", "/");
+                            res.status = 302;
+                        }
                         return httplib::Server::HandlerResponse::Handled;
                     } else {
                         send_auth_denied(res);
