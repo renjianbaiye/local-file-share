@@ -222,6 +222,16 @@ void SQLitePhotoRepository::initialize() {
             "created_at INTEGER NOT NULL,"
             "updated_at INTEGER NOT NULL"
             ");"
+            "CREATE TABLE IF NOT EXISTS photo_tags ("
+            "photo_id INTEGER NOT NULL,"
+            "tag TEXT NOT NULL,"
+            "probability REAL NOT NULL,"
+            "threshold_value REAL NOT NULL,"
+            "predicted INTEGER NOT NULL,"
+            "derived INTEGER NOT NULL,"
+            "PRIMARY KEY(photo_id, tag),"
+            "FOREIGN KEY(photo_id) REFERENCES photos(id) ON DELETE CASCADE"
+            ");"
             "CREATE INDEX IF NOT EXISTS idx_photos_folder_path ON photos(folder_path);"
             "CREATE INDEX IF NOT EXISTS idx_photos_media_type ON photos(media_type);"
             "CREATE INDEX IF NOT EXISTS idx_photos_captured_at ON photos(captured_at DESC, id DESC);"
@@ -229,7 +239,8 @@ void SQLitePhotoRepository::initialize() {
             "CREATE INDEX IF NOT EXISTS idx_photos_favorite ON photos(is_favorite);"
             "CREATE INDEX IF NOT EXISTS idx_photos_missing ON photos(missing);"
             "CREATE INDEX IF NOT EXISTS idx_jobs_status_type ON jobs(status, job_type);"
-            "PRAGMA user_version = 1;"
+            "CREATE INDEX IF NOT EXISTS idx_photo_tags_tag ON photo_tags(tag);"
+            "PRAGMA user_version = 2;"
         );
         exec("COMMIT;");
     } catch (...) {
@@ -417,6 +428,56 @@ std::vector<std::string> SQLitePhotoRepository::listIndexedRelativePaths() const
         paths.push_back(columnText(stmt.get(), 0));
     }
     return paths;
+}
+
+void SQLitePhotoRepository::replacePhotoTags(const std::string& relative_path, const std::vector<PhotoTag>& tags) {
+    PhotoRecord photo = getPhotoByRelativePath(relative_path);
+    exec("BEGIN;");
+    try {
+        {
+            Statement stmt(db_, "DELETE FROM photo_tags WHERE photo_id = ?;");
+            sqlite3_bind_int64(stmt.get(), 1, photo.id);
+            stepDone(db_, stmt.get());
+        }
+
+        for (const PhotoTag& tag : tags) {
+            Statement stmt(db_,
+                "INSERT INTO photo_tags (photo_id, tag, probability, threshold_value, predicted, derived) "
+                "VALUES (?, ?, ?, ?, ?, ?);");
+            sqlite3_bind_int64(stmt.get(), 1, photo.id);
+            bindText(stmt.get(), 2, tag.tag);
+            sqlite3_bind_double(stmt.get(), 3, tag.probability);
+            sqlite3_bind_double(stmt.get(), 4, tag.threshold);
+            sqlite3_bind_int(stmt.get(), 5, tag.predicted ? 1 : 0);
+            sqlite3_bind_int(stmt.get(), 6, tag.derived ? 1 : 0);
+            stepDone(db_, stmt.get());
+        }
+        exec("COMMIT;");
+    } catch (...) {
+        exec("ROLLBACK;");
+        throw;
+    }
+}
+
+std::vector<PhotoTag> SQLitePhotoRepository::listPhotoTags(int64_t photo_id) const {
+    open();
+    Statement stmt(db_,
+        "SELECT tag, probability, threshold_value, predicted, derived "
+        "FROM photo_tags WHERE photo_id = ? "
+        "ORDER BY predicted DESC, derived DESC, probability DESC, tag ASC;");
+    sqlite3_bind_int64(stmt.get(), 1, photo_id);
+
+    std::vector<PhotoTag> tags;
+    while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+        PhotoTag tag;
+        tag.tag = columnText(stmt.get(), 0);
+        tag.probability = sqlite3_column_double(stmt.get(), 1);
+        tag.threshold = sqlite3_column_double(stmt.get(), 2);
+        tag.predicted = sqlite3_column_int(stmt.get(), 3) != 0;
+        tag.derived = sqlite3_column_int(stmt.get(), 4) != 0;
+        tags.push_back(tag);
+    }
+    return tags;
 }
 
 void SQLitePhotoRepository::markMissing(const std::string& relative_path) {

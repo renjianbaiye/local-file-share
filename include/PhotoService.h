@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PhotoRepository.h"
+#include "PhotoTagger.h"
 
 #include <atomic>
 #include <mutex>
@@ -20,6 +21,7 @@ struct ScanStatus {
 class PhotoService {
 public:
     PhotoService(std::wstring share_root, PhotoRepository& repository);
+    PhotoService(std::wstring share_root, PhotoRepository& repository, PhotoTagger* tagger);
 
     ScanStatus scanNow();
     ScanStatus startScanAsync();
@@ -32,9 +34,11 @@ private:
     ScanStatus beginScan();
     void finishScan(const ScanStatus& status);
     PhotoRecord buildRecord(const std::wstring& file_path, int64_t indexed_at) const;
+    void tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path) const;
 
     std::wstring share_root_;
     PhotoRepository& repository_;
+    PhotoTagger* tagger_ = nullptr;
     mutable std::mutex status_mutex_;
     ScanStatus status_;
     std::atomic<bool> scanning_{false};

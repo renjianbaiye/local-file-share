@@ -3,6 +3,7 @@
 #include "FileManager.h"
 #include "HtmlRenderer.h"
 #include "PhotoService.h"
+#include "PhotoTagger.h"
 #include "SQLitePhotoRepository.h"
 #include "httplib.h"
 
@@ -15,8 +16,10 @@
 
 #include <algorithm>
 #include <cwctype>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <stdio.h>
@@ -318,7 +321,26 @@ static void append_optional_small_int_json(std::ostringstream& out, const char* 
     }
 }
 
-static std::string photo_json(const PhotoRecord& photo) {
+static std::string photo_tags_json(const std::vector<PhotoTag>& tags) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < tags.size(); ++i) {
+        if (i != 0) {
+            out << ",";
+        }
+        out << "{"
+            << "\"tag\":\"" << json_escape(tags[i].tag) << "\""
+            << ",\"probability\":" << tags[i].probability
+            << ",\"threshold\":" << tags[i].threshold
+            << ",\"predicted\":" << bool_json(tags[i].predicted)
+            << ",\"derived\":" << bool_json(tags[i].derived)
+            << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
+static std::string photo_json(const PhotoRecord& photo, const std::vector<PhotoTag>& tags = {}) {
     std::ostringstream out;
     out << "{"
         << "\"id\":" << photo.id
@@ -335,6 +357,7 @@ static std::string photo_json(const PhotoRecord& photo) {
         << ",\"thumbnailUrl\":\"/api/photos/" << photo.id << "/thumbnail\""
         << ",\"downloadUrl\":\"/download/" << url_encode(photo.relative_path) << "\""
         << ",\"isFavorite\":" << bool_json(photo.is_favorite)
+        << ",\"tags\":" << photo_tags_json(tags)
         << "}";
     return out.str();
 }
@@ -396,14 +419,14 @@ static TimelineQuery timeline_query_from_request(const httplib::Request& req) {
     return query;
 }
 
-static std::string timeline_json(const std::vector<PhotoRecord>& photos, int requested_limit) {
+static std::string timeline_json(const std::vector<PhotoRecord>& photos, int requested_limit, const PhotoRepository& repository) {
     std::ostringstream out;
     out << "{\"items\":[";
     for (size_t i = 0; i < photos.size(); ++i) {
         if (i != 0) {
             out << ',';
         }
-        out << photo_json(photos[i]);
+        out << photo_json(photos[i], repository.listPhotoTags(photos[i].id));
     }
     out << "],\"nextCursor\":";
     if (requested_limit > 0 && photos.size() >= static_cast<size_t>(requested_limit)) {
@@ -447,7 +470,22 @@ int Server::run(const Options& options) {
     ensure_parent_directory(options.photo_db_path);
     SQLitePhotoRepository photo_repository(options.photo_db_path);
     photo_repository.initialize();
-    PhotoService photo_service(options.share_dir, photo_repository);
+
+    PythonPhotoTaggerOptions tagger_options;
+    tagger_options.python_exe = options.album_cv_python.empty()
+        ? L"C:\\Users\\18361\\.conda\\envs\\album-cv\\python.exe"
+        : options.album_cv_python;
+    tagger_options.project_root = options.album_cv_root.empty()
+        ? L"C:\\Code\\PythonCode\\album-python-cv-"
+        : options.album_cv_root;
+    tagger_options.device = options.album_cv_device.empty() ? L"cuda" : options.album_cv_device;
+    tagger_options.log_path = L"C:\\Code\\CppCode\\local-file-share\\tagger-last.log";
+
+    OnnxPhotoTaggerOptions onnx_options;
+    onnx_options.model_path =
+        L"C:\\Code\\CppCode\\local-file-share\\models\\smart_album_tags_v2\\smart_album_tags_v2.onnx";
+    std::unique_ptr<PhotoTagger> photo_tagger = create_photo_tagger(onnx_options, tagger_options);
+    PhotoService photo_service(options.share_dir, photo_repository, photo_tagger.get());
 
     httplib::Server server;
     std::string lan_ip = detect_lan_ipv4();
@@ -586,7 +624,7 @@ int Server::run(const Options& options) {
         try {
             TimelineQuery query = timeline_query_from_request(req);
             std::vector<PhotoRecord> photos = photo_repository.listTimeline(query);
-            res.set_content(timeline_json(photos, query.limit <= 0 ? 100 : std::min(query.limit, 500)),
+            res.set_content(timeline_json(photos, query.limit <= 0 ? 100 : std::min(query.limit, 500), photo_repository),
                             "application/json; charset=utf-8");
         } catch (const std::exception& ex) {
             send_error(res, 500, ex.what());
@@ -844,7 +882,8 @@ int Server::run(const Options& options) {
 
     std::cout << "LocalFileShare started.\n"
               << "Shared directory: " << wide_to_utf8(options.share_dir) << "\n"
-              << "Photo database: " << wide_to_utf8(options.photo_db_path) << "\n";
+              << "Photo database: " << wide_to_utf8(options.photo_db_path) << "\n"
+              << "Album CV tagger: " << (photo_tagger->available() ? "enabled" : "disabled") << "\n";
 
     if (!options.no_auth) {
         std::cout << "Access token: " << token << "\n";

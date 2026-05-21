@@ -59,7 +59,8 @@ const filteredAlbumItems = computed(() => {
   if (!keyword) return albumItems.value
   return albumItems.value.filter((item) => {
     return item.fileName.toLowerCase().includes(keyword) ||
-      item.folderPath.toLowerCase().includes(keyword)
+      item.folderPath.toLowerCase().includes(keyword) ||
+      visibleTags(item).some((tag) => tag.tag.toLowerCase().includes(keyword))
   })
 })
 
@@ -289,6 +290,47 @@ const mediaIcon = (type) => {
   if (type === 'video') return Film
   if (type === 'raw') return Layers
   return Image
+}
+
+const tagPriority = (tag, allTags) => {
+  const hasPeoplePhoto = allTags.some((item) => item.tag === 'people_photo' && (item.predicted || item.derived))
+  const priority = {
+    people_photo: 5,
+    portrait: 10,
+    food: 12,
+    building: 15,
+    landmark: 16,
+    city: 17,
+    mountain: 18,
+    beach: 19,
+    water: 20,
+    sky: 21,
+    nature: 22,
+    landscape: 23,
+    indoor: 24,
+    night: 25,
+    text_or_screen: 30,
+    document: 31,
+    screenshot: 32,
+    text_image: 33,
+    travel_checkin: 40,
+    travel_or_scenery: 41,
+    group_people: 50,
+  }
+  if (tag.tag === 'person') return hasPeoplePhoto ? 11 : 60
+  return priority[tag.tag] ?? (tag.derived ? 45 : 70)
+}
+
+const visibleTags = (item) => {
+  const tags = (item.tags || []).filter((tag) => tag.predicted || tag.derived)
+  return tags
+    .slice()
+    .sort((a, b) => {
+      const priorityDiff = tagPriority(a, tags) - tagPriority(b, tags)
+      if (priorityDiff !== 0) return priorityDiff
+      return (b.probability || 0) - (a.probability || 0)
+    })
+    .slice(0, 5)
 }
 
 const formatDay = (seconds) => {
@@ -543,6 +585,11 @@ onMounted(async () => {
                     <Heart :size="14" :fill="item.isFavorite ? 'currentColor' : 'none'" />
                   </button>
                 </div>
+                <div v-if="visibleTags(item).length" class="tag-row">
+                  <span v-for="tag in visibleTags(item)" :key="tag.tag" :class="{ derived: tag.derived }">
+                    {{ tag.tag }}
+                  </span>
+                </div>
               </article>
             </div>
           </section>
@@ -576,6 +623,11 @@ onMounted(async () => {
             <div><dt>大小</dt><dd>{{ formatBytes(previewItem.sizeBytes) }}</dd></div>
             <div><dt>时间</dt><dd>{{ formatDateTime(previewItem.capturedAt || previewItem.modifiedAt) }}</dd></div>
           </dl>
+          <div v-if="visibleTags(previewItem).length" class="preview-tags">
+            <span v-for="tag in visibleTags(previewItem)" :key="tag.tag" :class="{ derived: tag.derived }">
+              {{ tag.tag }}
+            </span>
+          </div>
           <div class="preview-actions">
             <a class="dark-button" :href="previewItem.downloadUrl">
               <ArrowDownToLine :size="15" />

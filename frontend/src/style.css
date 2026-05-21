@@ -563,6 +563,31 @@ h1 {
   color: var(--text-primary);
 }
 
+.tag-row, .preview-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag-row {
+  padding: 0 12px 12px;
+}
+.tag-row span, .preview-tags span {
+  max-width: 100%;
+  padding: 3px 7px;
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--accent-light);
+  border-radius: 6px;
+}
+.tag-row span.derived, .preview-tags span.derived {
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.1);
+}
+
 /* ── Favorite & Close Buttons ── */
 .favorite-button, .close-button {
   display: grid;

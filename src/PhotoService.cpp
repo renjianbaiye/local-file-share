@@ -8,6 +8,7 @@
 #include <set>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -44,6 +45,9 @@ std::string hash_root_path(const std::wstring& root) {
 
 PhotoService::PhotoService(std::wstring share_root, PhotoRepository& repository)
     : share_root_(std::move(share_root)), repository_(repository) {}
+
+PhotoService::PhotoService(std::wstring share_root, PhotoRepository& repository, PhotoTagger* tagger)
+    : share_root_(std::move(share_root)), repository_(repository), tagger_(tagger) {}
 
 ScanStatus PhotoService::beginScan() {
     bool expected = false;
@@ -107,6 +111,18 @@ PhotoRecord PhotoService::buildRecord(const std::wstring& file_path, int64_t ind
     return photo;
 }
 
+void PhotoService::tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path) const {
+    if (tagger_ == nullptr || !tagger_->available() || photo.media_type != "image") {
+        return;
+    }
+
+    try {
+        std::vector<PhotoTag> tags = tagger_->predict(file_path);
+        repository_.replacePhotoTags(photo.relative_path, tags);
+    } catch (...) {
+    }
+}
+
 ScanStatus PhotoService::scanNow() {
     ScanStatus current = beginScan();
     if (current.status != "scanning") {
@@ -130,6 +146,7 @@ ScanStatus PhotoService::scanNow() {
             PhotoRecord photo = buildRecord(entry.path().wstring(), indexed_at);
             seen.insert(photo.relative_path);
             repository_.upsertPhoto(photo);
+            tagPhotoIfAvailable(photo, entry.path().wstring());
             ++current.total_seen;
             ++current.total_indexed;
         }
@@ -177,6 +194,7 @@ ScanStatus PhotoService::startScanAsync() {
                 PhotoRecord photo = buildRecord(entry.path().wstring(), indexed_at);
                 seen.insert(photo.relative_path);
                 repository_.upsertPhoto(photo);
+                tagPhotoIfAvailable(photo, entry.path().wstring());
                 ++current.total_seen;
                 ++current.total_indexed;
             }

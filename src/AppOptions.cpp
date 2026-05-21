@@ -22,6 +22,9 @@ void print_usage() {
         << "  --host <host>      Listen host, default 0.0.0.0\n"
         << "  --photo-db <path>  SQLite photo album database path\n"
         << "  --token <token>    Use a specific access token instead of generating one\n"
+        << "  --album-cv-root <path>     Python album CV project root\n"
+        << "  --album-cv-python <path>   Python executable for album CV inference\n"
+        << "  --album-cv-device <value>  Inference device, default cuda\n"
         << "  --no-open          Do not open the browser automatically\n"
         << "  --no-auth          Disable token authentication (only allowed with 127.0.0.1/localhost)\n"
         << "  --dev              Dev mode: allow CORS from Vite dev server (127.0.0.1:5173)\n"
@@ -91,6 +94,33 @@ bool parse_options(int argc, wchar_t* argv[], Options& options, bool& help_reque
                 return false;
             }
             options.auth_token = wide_to_utf8(argv[++i]);
+            continue;
+        }
+
+        if (arg == L"--album-cv-root") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --album-cv-root\n";
+                return false;
+            }
+            options.album_cv_root = argv[++i];
+            continue;
+        }
+
+        if (arg == L"--album-cv-python") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --album-cv-python\n";
+                return false;
+            }
+            options.album_cv_python = argv[++i];
+            continue;
+        }
+
+        if (arg == L"--album-cv-device") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --album-cv-device\n";
+                return false;
+            }
+            options.album_cv_device = argv[++i];
             continue;
         }
 

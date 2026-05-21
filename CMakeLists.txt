@@ -16,6 +16,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
 
+set(ONNXRUNTIME_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/onnxruntime/onnxruntime-win-x64-gpu-1.23.2" CACHE PATH "ONNX Runtime GPU SDK root")
+set(LFS_ENABLE_ONNXRUNTIME OFF)
+if (EXISTS "${ONNXRUNTIME_ROOT}/include/onnxruntime_cxx_api.h" AND EXISTS "${ONNXRUNTIME_ROOT}/lib/onnxruntime.lib")
+    set(LFS_ENABLE_ONNXRUNTIME ON)
+endif()
+
 FetchContent_Declare(
     sqlite3
     URL https://sqlite.org/2026/sqlite-amalgamation-3530100.zip
@@ -34,6 +40,7 @@ add_executable(LocalFileShare
     src/AppOptions.cpp
     src/FileManager.cpp
     src/HtmlRenderer.cpp
+    src/PhotoTagger.cpp
     src/PhotoService.cpp
     src/Server.cpp
     src/SQLitePhotoRepository.cpp
@@ -46,6 +53,25 @@ target_include_directories(LocalFileShare PRIVATE
 )
 
 target_link_libraries(LocalFileShare PRIVATE sqlite3)
+
+if (LFS_ENABLE_ONNXRUNTIME)
+    target_compile_definitions(LocalFileShare PRIVATE LFS_ENABLE_ONNXRUNTIME)
+    target_include_directories(LocalFileShare PRIVATE "${ONNXRUNTIME_ROOT}/include")
+    target_link_directories(LocalFileShare PRIVATE "${ONNXRUNTIME_ROOT}/lib")
+    target_link_libraries(LocalFileShare PRIVATE
+        onnxruntime
+        onnxruntime_providers_cuda
+        onnxruntime_providers_shared
+        gdiplus
+    )
+    add_custom_command(TARGET LocalFileShare POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${ONNXRUNTIME_ROOT}/lib/onnxruntime.dll"
+            "${ONNXRUNTIME_ROOT}/lib/onnxruntime_providers_cuda.dll"
+            "${ONNXRUNTIME_ROOT}/lib/onnxruntime_providers_shared.dll"
+            "$<TARGET_FILE_DIR:LocalFileShare>"
+    )
+endif()
 
 enable_testing()
 

@@ -77,6 +77,8 @@ dist-ssr/
 *.sdf
 *.opensdf
 *.db
+*.db-shm
+*.db-wal
 ipch/
 [Dd]ebug/
 [Rr]elease/
@@ -93,4 +95,12 @@ cmake_install.cmake
 x64/
 x86/
 
+third_party/onnxruntime/
+models/**/*.onnx
+smoke-share/
+*-smoke.*
+backend-*.err
+backend-*.out
+min.err
+min.out
 

@@ -22,11 +22,12 @@ int main() {
             SQLitePhotoRepository repository(db_path);
             repository.initialize();
 
-            assert(repository.schemaVersion() == 1);
+            assert(repository.schemaVersion() == 2);
             assert(repository.hasTable("photos"));
             assert(repository.hasTable("folders"));
             assert(repository.hasTable("scan_runs"));
             assert(repository.hasTable("jobs"));
+            assert(repository.hasTable("photo_tags"));
 
             PhotoRecord photo;
             photo.relative_path = "camera/DSC_0001.JPG";
@@ -56,6 +57,17 @@ int main() {
             repository.toggleFavorite(stored.id, true);
             stored = repository.getPhoto(stored.id);
             assert(stored.is_favorite == true);
+
+            PhotoTag tag;
+            tag.tag = "person";
+            tag.probability = 0.91;
+            tag.threshold = 0.61;
+            tag.predicted = true;
+            repository.replacePhotoTags("camera/DSC_0001.JPG", {tag});
+            auto tags = repository.listPhotoTags(stored.id);
+            assert(tags.size() == 1);
+            assert(tags[0].tag == "person");
+            assert(tags[0].predicted == true);
 
             repository.markMissing("camera/DSC_0001.JPG");
             stored = repository.getPhoto(stored.id);

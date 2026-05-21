@@ -24,6 +24,8 @@ public:
     std::vector<PhotoRecord> listTimeline(const TimelineQuery& query) const override;
     std::vector<FolderRecord> listFolders() const override;
     std::vector<std::string> listIndexedRelativePaths() const override;
+    void replacePhotoTags(const std::string& relative_path, const std::vector<PhotoTag>& tags) override;
+    std::vector<PhotoTag> listPhotoTags(int64_t photo_id) const override;
     void markMissing(const std::string& relative_path) override;
     void toggleFavorite(int64_t id, bool favorite) override;
 

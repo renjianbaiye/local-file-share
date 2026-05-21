@@ -5,6 +5,14 @@
 #include <string>
 #include <vector>
 
+struct PhotoTag {
+    std::string tag;
+    double probability = 0.0;
+    double threshold = 0.0;
+    bool predicted = false;
+    bool derived = false;
+};
+
 struct PhotoRecord {
     int64_t id = 0;
     std::string relative_path;
@@ -59,6 +67,8 @@ public:
     virtual std::vector<PhotoRecord> listTimeline(const TimelineQuery& query) const = 0;
     virtual std::vector<FolderRecord> listFolders() const = 0;
     virtual std::vector<std::string> listIndexedRelativePaths() const = 0;
+    virtual void replacePhotoTags(const std::string& relative_path, const std::vector<PhotoTag>& tags) = 0;
+    virtual std::vector<PhotoTag> listPhotoTags(int64_t photo_id) const = 0;
     virtual void markMissing(const std::string& relative_path) = 0;
     virtual void toggleFavorite(int64_t id, bool favorite) = 0;
 };

@@ -1,0 +1,95 @@
+{
+  "model_name": "smart_album_tags_v2",
+  "architecture": "convnext_small",
+  "onnx_file": "smart_album_tags_v2.onnx",
+  "input": {
+    "name": "input",
+    "shape": [
+      "batch_size",
+      3,
+      224,
+      224
+    ],
+    "color": "RGB",
+    "resize": [
+      224,
+      224
+    ],
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "output": {
+    "name": "logits",
+    "activation": "sigmoid",
+    "labels": [
+      "person",
+      "portrait",
+      "group_people",
+      "food",
+      "landscape",
+      "nature",
+      "water",
+      "mountain",
+      "beach",
+      "sky",
+      "building",
+      "landmark",
+      "city",
+      "indoor",
+      "night",
+      "text_image",
+      "document",
+      "screenshot"
+    ],
+    "thresholds": {
+      "person": 0.6099998950958252,
+      "portrait": 0.22999995946884155,
+      "group_people": 0.5,
+      "food": 0.8999998569488525,
+      "landscape": 0.05000000074505806,
+      "nature": 0.7699998617172241,
+      "water": 0.5999999046325684,
+      "mountain": 0.09999999403953552,
+      "beach": 0.5099999308586121,
+      "sky": 0.07999999821186066,
+      "building": 0.34999996423721313,
+      "landmark": 0.5899999141693115,
+      "city": 0.31999996304512024,
+      "indoor": 0.24999995529651642,
+      "night": 0.05000000074505806,
+      "text_image": 0.49999991059303284,
+      "document": 0.21999995410442352,
+      "screenshot": 0.49999991059303284
+    }
+  },
+  "derived_tags": {
+    "people_photo": [
+      "person",
+      "portrait"
+    ],
+    "travel_signals": [
+      "landscape",
+      "nature",
+      "water",
+      "mountain",
+      "beach",
+      "sky",
+      "building",
+      "landmark",
+      "city"
+    ],
+    "text_or_screen": [
+      "screenshot",
+      "document",
+      "text_image"
+    ]
+  }
+}

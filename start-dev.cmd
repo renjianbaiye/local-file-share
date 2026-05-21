@@ -19,8 +19,17 @@ set LAN_IP=127.0.0.1
 set NODE_EXE=node.exe
 set NPM_CLI=
 set AUTH_TOKEN=
+if "%ALBUM_CV_ROOT%"=="" set ALBUM_CV_ROOT=C:\Code\PythonCode\album-python-cv-
+if "%ALBUM_CV_PYTHON%"=="" set ALBUM_CV_PYTHON=C:\Users\18361\.conda\envs\album-cv\python.exe
+if "%ALBUM_CV_DEVICE%"=="" set ALBUM_CV_DEVICE=cuda
+if "%ONNXRUNTIME_ROOT%"=="" set ONNXRUNTIME_ROOT=%ROOT%third_party\onnxruntime\onnxruntime-win-x64-gpu-1.23.2
+if "%CUDA_BIN%"=="" set CUDA_BIN=C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8\bin
+if "%CUDNN_BIN%"=="" set CUDNN_BIN=C:\Users\18361\.conda\envs\album-cv\Lib\site-packages\torch\lib
 
 if exist "C:\Program Files\nodejs\node.exe" set "PATH=C:\Program Files\nodejs;%PATH%"
+if exist "%ONNXRUNTIME_ROOT%\lib\onnxruntime.dll" set "PATH=%ONNXRUNTIME_ROOT%\lib;%PATH%"
+if exist "%CUDA_BIN%\cudart64_12.dll" set "PATH=%CUDA_BIN%;%PATH%"
+if exist "%CUDNN_BIN%\cudnn64_9.dll" set "PATH=%CUDNN_BIN%;%PATH%"
 
 for /f "usebackq delims=" %%i in (`powershell -NoProfile -Command "-join ((1..32) | ForEach-Object { '{0:x}' -f (Get-Random -Minimum 0 -Maximum 16) })"`) do set AUTH_TOKEN=%%i
 
@@ -71,9 +80,13 @@ if not exist "%SHARE_DIR%" (
 echo Starting C++ backend on http://%LAN_IP%:8080 ...
 echo Shared directory: %SHARE_DIR%
 echo Photo database: %ROOT%photos.db
+echo Album CV root: %ALBUM_CV_ROOT%
+echo Album CV python: %ALBUM_CV_PYTHON%
+echo ONNX Runtime: %ONNXRUNTIME_ROOT%
 > "%BACKEND_CMD%" echo @echo off
 >> "%BACKEND_CMD%" echo cd /d "%ROOT%"
->> "%BACKEND_CMD%" echo "%BACKEND%" --dir "%SHARE_DIR%" --host %BACKEND_HOST% --port 8080 --no-open --dev --token %AUTH_TOKEN% --photo-db "%ROOT%photos.db"
+>> "%BACKEND_CMD%" echo set "PATH=%ONNXRUNTIME_ROOT%\lib;%CUDA_BIN%;%CUDNN_BIN%;%%PATH%%"
+>> "%BACKEND_CMD%" echo "%BACKEND%" --dir "%SHARE_DIR%" --host %BACKEND_HOST% --port 8080 --no-open --dev --token %AUTH_TOKEN% --photo-db "%ROOT%photos.db" --album-cv-root "%ALBUM_CV_ROOT%" --album-cv-python "%ALBUM_CV_PYTHON%" --album-cv-device %ALBUM_CV_DEVICE%
 start "LocalFileShare Backend :8080" cmd /k "%BACKEND_CMD%"
 
 echo Waiting for backend...
