@@ -79,6 +79,9 @@ dist-ssr/
 *.db
 *.db-shm
 *.db-wal
+photos.db*
+debug-photos*.db*
+onnx-smoke.db*
 ipch/
 [Dd]ebug/
 [Rr]elease/
