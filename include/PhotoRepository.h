@@ -71,4 +71,5 @@ public:
     virtual std::vector<PhotoTag> listPhotoTags(int64_t photo_id) const = 0;
     virtual void markMissing(const std::string& relative_path) = 0;
     virtual void toggleFavorite(int64_t id, bool favorite) = 0;
+    virtual void deletePhoto(int64_t id) = 0;
 };

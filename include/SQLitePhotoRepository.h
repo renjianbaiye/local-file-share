@@ -28,6 +28,7 @@ public:
     std::vector<PhotoTag> listPhotoTags(int64_t photo_id) const override;
     void markMissing(const std::string& relative_path) override;
     void toggleFavorite(int64_t id, bool favorite) override;
+    void deletePhoto(int64_t id) override;
 
 private:
     void open() const;

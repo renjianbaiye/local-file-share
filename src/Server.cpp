@@ -651,6 +651,60 @@ int Server::run(const Options& options) {
         }
     });
 
+    server.Delete(R"(/api/photos/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            PhotoRecord photo = photo_repository.getPhoto(id);
+            
+            std::wstring target = resolve_request_path(options.share_dir, photo.relative_path);
+            if (is_regular_file(target)) {
+                std::error_code ec;
+                std::filesystem::remove(target, ec);
+            }
+            
+            if (!photo.thumbnail_path.empty()) {
+                std::error_code ec;
+                std::filesystem::remove(utf8_to_wide(photo.thumbnail_path), ec);
+            }
+            
+            photo_repository.deletePhoto(id);
+            
+            res.set_content("{\"status\":\"ok\"}", "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Post("/api/photos/delete_batch", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            std::vector<std::string> ids_str = split_csv(req.body);
+            int count = 0;
+            for (const std::string& id_str : ids_str) {
+                try {
+                    int64_t id = std::stoll(id_str);
+                    PhotoRecord photo = photo_repository.getPhoto(id);
+                    
+                    std::wstring target = resolve_request_path(options.share_dir, photo.relative_path);
+                    if (is_regular_file(target)) {
+                        std::error_code ec;
+                        std::filesystem::remove(target, ec);
+                    }
+                    if (!photo.thumbnail_path.empty()) {
+                        std::error_code ec;
+                        std::filesystem::remove(utf8_to_wide(photo.thumbnail_path), ec);
+                    }
+                    photo_repository.deletePhoto(id);
+                    count++;
+                } catch (...) {
+                    // Ignore errors for individual files (e.g. already deleted)
+                }
+            }
+            res.set_content("{\"status\":\"ok\",\"deleted\":" + std::to_string(count) + "}", "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
     server.Get(R"(/api/photos/(\d+)/thumbnail)", [&](const httplib::Request& req, httplib::Response& res) {
         try {
             PhotoRecord photo = photo_repository.getPhoto(std::stoll(req.matches[1]));

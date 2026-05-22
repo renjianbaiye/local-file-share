@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
 import {
   ArrowDownToLine,
   ChevronRight,
@@ -20,6 +20,10 @@ import {
   Upload,
   Wifi,
   X,
+  Trash2,
+  CheckSquare,
+  Check,
+  ListChecks,
 } from '@lucide/vue'
 
 const activeView = ref('files')
@@ -46,8 +50,112 @@ const selectedMedia = ref('all')
 const favoriteOnly = ref(false)
 const nextCursor = ref(null)
 const previewItem = ref(null)
+const isSelectMode = ref(false)
+const selectedIds = ref(new Set())
 let scanPollTimer = null
 
+/* ══════════════════════════════════════════════════════════
+   Liquid Glass — Interactive Mouse Tracking
+   ══════════════════════════════════════════════════════════ */
+const mouseX = ref(0)
+const mouseY = ref(0)
+
+const handleGlobalMouseMove = (e) => {
+  mouseX.value = e.clientX
+  mouseY.value = e.clientY
+  document.documentElement.style.setProperty('--mouse-x', `${e.clientX}px`)
+  document.documentElement.style.setProperty('--mouse-y', `${e.clientY}px`)
+}
+
+/* ── Card 3D Tilt Effect ── */
+const handleCardMouseMove = (e, itemEl) => {
+  if (!itemEl) return
+  const rect = itemEl.getBoundingClientRect()
+  const x = (e.clientX - rect.left) / rect.width
+  const y = (e.clientY - rect.top) / rect.height
+  const tiltX = (y - 0.5) * -10 // ±5 degrees
+  const tiltY = (x - 0.5) * 10  // ±5 degrees
+  itemEl.style.transform = `perspective(800px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateY(-4px) scale(1.02)`
+}
+
+const handleCardMouseLeave = (itemEl) => {
+  if (!itemEl) return
+  itemEl.style.transform = ''
+}
+
+/* ── Hero Stats 3D Tilt ── */
+const handleStatMouseMove = (e) => {
+  const el = e.currentTarget
+  const rect = el.getBoundingClientRect()
+  const x = (e.clientX - rect.left) / rect.width
+  const y = (e.clientY - rect.top) / rect.height
+  const tiltX = (y - 0.5) * -8
+  const tiltY = (x - 0.5) * 8
+  el.style.transform = `perspective(600px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateY(-3px) scale(1.03)`
+}
+
+const handleStatMouseLeave = (e) => {
+  e.currentTarget.style.transform = ''
+}
+
+/* ── Thumbnail Click-Region Interaction ── */
+const handleThumbClick = (e, item) => {
+  const thumb = e.currentTarget
+  const rect = thumb.getBoundingClientRect()
+  const x = (e.clientX - rect.left) / rect.width
+  const y = (e.clientY - rect.top) / rect.height
+  const img = thumb.querySelector('img')
+
+  // Create glow at click position
+  const glow = thumb.querySelector('.thumb-glow')
+  if (glow) {
+    glow.style.background = `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255,255,255,0.5) 0%, rgba(0,113,227,0.15) 40%, transparent 70%)`
+    glow.classList.remove('active')
+    void glow.offsetWidth // force reflow
+    glow.classList.add('active')
+  }
+
+  if (!img) return
+
+  // Different transformations based on click region
+  let transform = ''
+  if (x < 0.33) {
+    // Left region — tilt left + light sweep from right
+    transform = 'perspective(600px) rotateY(-12deg) scale(1.04)'
+  } else if (x > 0.66) {
+    // Right region — tilt right + light sweep from left
+    transform = 'perspective(600px) rotateY(12deg) scale(1.04)'
+  } else if (y < 0.33) {
+    // Top region — tilt up
+    transform = 'perspective(600px) rotateX(10deg) scale(1.04)'
+  } else if (y > 0.66) {
+    // Bottom region — tilt down
+    transform = 'perspective(600px) rotateX(-10deg) scale(1.04)'
+  } else {
+    // Center — pulse zoom
+    transform = 'scale(1.12)'
+  }
+
+  img.style.transition = 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+  img.style.transform = transform
+
+  // Spring back
+  setTimeout(() => {
+    img.style.transition = 'transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    img.style.transform = 'scale(1)'
+  }, 350)
+
+  // Let it bubble up to open preview after the effect is visible
+  // (we stop immediate propagation, then manually trigger after delay)
+  e.stopPropagation()
+  setTimeout(() => {
+    previewItem.value = item
+  }, 200)
+}
+
+/* ══════════════════════════════════════════════════════════
+   Business Logic (unchanged)
+   ══════════════════════════════════════════════════════════ */
 const visibleEntries = computed(() => {
   const keyword = fileQuery.value.trim().toLowerCase()
   if (!keyword) return entries.value
@@ -270,6 +378,64 @@ const toggleFavorite = async (item) => {
   await loadFolders()
 }
 
+const deletePhoto = async (item) => {
+  if (!window.confirm(`确定要彻底删除文件 ${item.fileName} 吗？此操作无法恢复！`)) return
+
+  const response = await fetch(`/api/photos/${item.id}`, { method: 'DELETE' })
+  if (!response.ok) {
+    const errorMsg = await response.text()
+    alert(`删除失败: ${errorMsg}`)
+    return
+  }
+
+  // Close preview if it's the deleted item
+  if (previewItem.value?.id === item.id) {
+    previewItem.value = null
+  }
+
+  await fetch('/api/photos/scan', { method: 'POST' })
+  await reloadAlbum()
+  await loadFolders()
+  await loadDirectory(currentPath.value)
+}
+
+const toggleSelectMode = () => {
+  isSelectMode.value = !isSelectMode.value
+  selectedIds.value.clear()
+}
+
+const toggleSelection = (id) => {
+  if (selectedIds.value.has(id)) {
+    selectedIds.value.delete(id)
+  } else {
+    selectedIds.value.add(id)
+  }
+}
+
+const deleteSelectedPhotos = async () => {
+  if (selectedIds.value.size === 0) return
+  if (!window.confirm(`确定要彻底删除选中的 ${selectedIds.value.size} 个文件吗？此操作无法恢复！`)) return
+
+  const idsArray = Array.from(selectedIds.value)
+  const response = await fetch('/api/photos/delete_batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: idsArray.join(',')
+  })
+
+  if (!response.ok) {
+    const errorMsg = await response.text()
+    alert(`批量删除失败: ${errorMsg}`)
+    return
+  }
+
+  toggleSelectMode()
+  await fetch('/api/photos/scan', { method: 'POST' })
+  await reloadAlbum()
+  await loadFolders()
+  await loadDirectory(currentPath.value)
+}
+
 const fileType = (entry) => {
   if (entry.type === 'folder') return 'folder'
   const lower = entry.name.toLowerCase()
@@ -362,6 +528,9 @@ const formatBytes = (bytes) => {
 }
 
 onMounted(async () => {
+  // Register global mouse tracking
+  window.addEventListener('mousemove', handleGlobalMouseMove)
+
   try {
     await authenticateFromUrl()
     await Promise.all([loadDirectory(), reloadAlbum()])
@@ -373,11 +542,26 @@ onMounted(async () => {
     albumError.value = `Authentication failed: ${error.message}`
   }
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('mousemove', handleGlobalMouseMove)
+  if (scanPollTimer) {
+    window.clearInterval(scanPollTimer)
+    scanPollTimer = null
+  }
+})
 </script>
 
 <template>
+  <!-- Ambient Background — Floating Gradient Orbs -->
+  <div class="ambient-bg">
+    <div class="gradient-orb orb-1"></div>
+    <div class="gradient-orb orb-2"></div>
+    <div class="gradient-orb orb-3"></div>
+  </div>
+
   <main class="shell">
-    <!-- Navigation Bar -->
+    <!-- Navigation Bar — Frosted Glass -->
     <nav class="topbar">
       <button class="brand" type="button" @click="activeView = 'files'">
         <span class="brand-mark"><Wifi :size="17" /></span>
@@ -405,22 +589,22 @@ onMounted(async () => {
       </div>
     </nav>
 
-    <!-- Hero Section -->
+    <!-- Hero Section — Liquid Glass Hero -->
     <section class="hero-strip">
       <div>
         <p class="eyebrow">LOCAL MEDIA WORKSPACE</p>
         <h1>在局域网内轻松共享文件，浏览索引相册。</h1>
       </div>
       <div class="hero-stats">
-        <article>
+        <article @mousemove="handleStatMouseMove" @mouseleave="handleStatMouseLeave">
           <strong>{{ fileStats.files ?? 0 }}</strong>
           <span>文件数</span>
         </article>
-        <article>
+        <article @mousemove="handleStatMouseMove" @mouseleave="handleStatMouseLeave">
           <strong>{{ indexedTotal }}</strong>
           <span>已索引媒体</span>
         </article>
-        <article>
+        <article @mousemove="handleStatMouseMove" @mouseleave="handleStatMouseLeave">
           <strong>{{ scanStatus.status === 'scanning' ? '扫描中' : scanStatus.status === 'done' ? '已完成' : '待扫描' }}</strong>
           <span>扫描状态</span>
         </article>
@@ -428,218 +612,260 @@ onMounted(async () => {
     </section>
 
     <!-- ═══════════ FILES VIEW ═══════════ -->
-    <section v-if="activeView === 'files'" class="workspace files-layout">
-      <aside class="side-panel">
-        <div class="panel-title">共享文件夹</div>
-        <p class="muted" style="font-size: 13px; margin-bottom: 0;">当前路径: /{{ currentPath }}</p>
-        <div class="side-stats">
-          <span>{{ fileStats.folders ?? 0 }} 个文件夹</span>
-          <span>{{ fileStats.files ?? 0 }} 个文件</span>
-          <span>共 {{ fileStats.totalSize ?? '0 B' }}</span>
-        </div>
-        <label class="upload-button">
-          <Upload :size="16" />
-          {{ isUploading ? '上传中...' : '上传文件' }}
-          <input type="file" multiple :disabled="isUploading" @change="handleUpload" />
-        </label>
-      </aside>
-
-      <section class="panel">
-        <header class="panel-head">
-          <label class="search-box">
-            <Search :size="16" />
-            <input v-model="fileQuery" type="search" placeholder="搜索当前文件夹..." />
+    <Transition name="view" mode="out-in" type="animation" :duration="{ enter: 450, leave: 250 }">
+      <section v-if="activeView === 'files'" key="files" class="workspace files-layout">
+        <aside class="side-panel">
+          <div class="panel-title">共享文件夹</div>
+          <p class="muted" style="font-size: 13px; margin-bottom: 0;">当前路径: /{{ currentPath }}</p>
+          <div class="side-stats">
+            <span>{{ fileStats.folders ?? 0 }} 个文件夹</span>
+            <span>{{ fileStats.files ?? 0 }} 个文件</span>
+            <span>共 {{ fileStats.totalSize ?? '0 B' }}</span>
+          </div>
+          <label class="upload-button">
+            <Upload :size="16" />
+            {{ isUploading ? '上传中...' : '上传文件' }}
+            <input type="file" multiple :disabled="isUploading" @change="handleUpload" />
           </label>
-          <div class="head-actions">
-            <button v-if="parentPath !== null" class="ghost-button" type="button" @click="loadDirectory(parentPath)">
-              返回上级
+        </aside>
+
+        <section class="panel">
+          <header class="panel-head">
+            <label class="search-box">
+              <Search :size="16" />
+              <input v-model="fileQuery" type="search" placeholder="搜索当前文件夹..." />
+            </label>
+            <div class="head-actions">
+              <button v-if="parentPath !== null" class="ghost-button" type="button" @click="loadDirectory(parentPath)">
+                返回上级
+              </button>
+              <button class="dark-button" type="button" @click="loadDirectory(currentPath)">
+                <RefreshCw :size="15" />
+                刷新
+              </button>
+            </div>
+          </header>
+
+          <div v-if="fileError" class="notice error">{{ fileError }}</div>
+          <div v-else-if="fileLoading" class="notice">正在加载文件列表...</div>
+          <div v-else-if="visibleEntries.length === 0" class="notice">当前文件夹为空</div>
+
+          <div v-else class="file-list">
+            <article
+              v-for="(entry, idx) in visibleEntries"
+              :key="entry.path"
+              class="file-row"
+              role="button"
+              tabindex="0"
+              :style="{ '--i': idx }"
+              @click="openEntry(entry)"
+              @keydown.enter="openEntry(entry)"
+            >
+              <span class="file-icon" :class="fileType(entry)">
+                <component :is="fileIcon(entry)" :size="20" />
+              </span>
+              <div class="file-main">
+                <strong>{{ entry.name }}</strong>
+                <span>{{ entry.type === 'folder' ? '文件夹' : '文件' }}</span>
+              </div>
+              <span class="file-size">{{ entry.size }}</span>
+              <span class="row-action">
+                <ChevronRight v-if="entry.type === 'folder'" :size="16" />
+                <ArrowDownToLine v-else :size="16" />
+              </span>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <!-- ═══════════ ALBUM VIEW ═══════════ -->
+      <section v-else key="album" class="workspace album-layout">
+        <aside class="side-panel album-sidebar">
+          <button class="scan-button" type="button" :disabled="scanLoading || scanStatus.status === 'scanning'" @click="startScan">
+            <LoaderCircle v-if="scanStatus.status === 'scanning'" class="spin" :size="16" />
+            <RefreshCw v-else :size="16" />
+            {{ scanStatus.status === 'scanning' ? '扫描中...' : '刷新索引' }}
+          </button>
+
+          <div class="scan-card">
+            <span>扫描状态</span>
+            <strong>{{ scanStatus.status === 'scanning' ? '进行中' : scanStatus.status === 'done' ? '已完成' : scanStatus.status || '空闲' }}</strong>
+            <small>已发现 {{ scanStatus.totalSeen ?? 0 }}，已移除 {{ scanStatus.totalRemoved ?? 0 }}</small>
+          </div>
+
+          <div class="filter-block">
+            <label>媒体类型</label>
+            <select v-model="selectedMedia" @change="setAlbumFilter">
+              <option value="all">全部媒体</option>
+              <option value="image">图片</option>
+              <option value="video">视频</option>
+              <option value="raw">RAW</option>
+            </select>
+          </div>
+
+          <div class="filter-block">
+            <label>文件夹</label>
+            <select v-model="selectedFolder" @change="setAlbumFilter">
+              <option value="">全部文件夹</option>
+              <option v-for="folder in folders" :key="folder.relativePath" :value="folder.relativePath">
+                {{ folder.relativePath || '/' }}
+              </option>
+            </select>
+          </div>
+
+          <label class="check-row">
+            <input v-model="favoriteOnly" type="checkbox" @change="setAlbumFilter" />
+            仅显示收藏
+          </label>
+
+          <div class="album-mini-stats">
+            <strong>索引统计</strong>
+            <span>{{ albumCounts.imageCount }} 张图片</span>
+            <span>{{ albumCounts.videoCount }} 个视频</span>
+            <span>{{ albumCounts.rawCount }} 个 RAW</span>
+            <small>当前网格已加载 {{ albumItems.length }} 项</small>
+          </div>
+        </aside>
+
+        <section class="panel album-panel">
+          <header class="panel-head album-head">
+            <label class="search-box wide">
+              <Search :size="16" />
+              <input v-model="albumQuery" type="search" placeholder="搜索已加载的媒体..." />
+            </label>
+            <button class="ghost-button" type="button" @click="toggleSelectMode" :class="{ 'danger-button': isSelectMode }">
+              <CheckSquare v-if="!isSelectMode" :size="15" />
+              <X v-else :size="15" />
+              {{ isSelectMode ? '取消选择' : '选择' }}
             </button>
-            <button class="dark-button" type="button" @click="loadDirectory(currentPath)">
+            <button class="ghost-button" type="button" @click="reloadAlbum">
               <RefreshCw :size="15" />
-              刷新
+              重新加载
+            </button>
+          </header>
+
+          <div v-if="albumError" class="notice error">{{ albumError }}</div>
+          <div v-else-if="albumLoading && albumItems.length === 0" class="notice">正在加载相册...</div>
+          <div v-else-if="albumItems.length === 0" class="empty-album">
+            <Sparkles :size="32" />
+            <strong>暂无索引媒体</strong>
+            <span>点击「刷新索引」来扫描共享文件夹中的 JPG、PNG、WebP、MP4 和 RAW 文件。</span>
+          </div>
+
+          <div v-else class="timeline">
+            <section v-for="group in groupedAlbumItems" :key="group.key" class="day-group">
+              <h2>{{ group.key }}</h2>
+              <div class="album-grid">
+                <article
+                  v-for="(item, idx) in group.items"
+                  :key="item.id"
+                  class="album-card"
+                  :class="{ 'is-selected': isSelectMode && selectedIds.has(item.id) }"
+                  :style="{ '--i': idx }"
+                  @mousemove="handleCardMouseMove($event, $event.currentTarget)"
+                  @mouseleave="handleCardMouseLeave($event.currentTarget)"
+                >
+                  <div class="thumb" @click="isSelectMode ? toggleSelection(item.id) : handleThumbClick($event, item)">
+                    <img
+                      v-if="item.mediaType === 'image' && item.thumbnailStatus === 'ready'"
+                      :src="item.thumbnailUrl"
+                      :alt="item.fileName"
+                      loading="lazy"
+                    />
+                    <component v-else :is="mediaIcon(item.mediaType)" :size="32" />
+                    <div class="thumb-glow"></div>
+                    <span class="media-badge">
+                      <component :is="mediaIcon(item.mediaType)" :size="12" />
+                      {{ item.mediaType === 'image' ? '图片' : item.mediaType === 'video' ? '视频' : 'RAW' }}
+                    </span>
+                    
+                    <div v-if="isSelectMode" class="select-indicator" :class="{ selected: selectedIds.has(item.id) }">
+                      <Check v-if="selectedIds.has(item.id)" :size="14" />
+                    </div>
+                  </div>
+                  <div class="album-card-foot">
+                    <strong>{{ item.fileName }}</strong>
+                    <button class="favorite-button" :class="{ active: item.isFavorite }" type="button" @click.stop="toggleFavorite(item)">
+                      <Heart :size="14" :fill="item.isFavorite ? 'currentColor' : 'none'" />
+                    </button>
+                  </div>
+                  <div v-if="visibleTags(item).length" class="tag-row">
+                    <span v-for="tag in visibleTags(item)" :key="tag.tag" :class="{ derived: tag.derived }">
+                      {{ tag.tag }}
+                    </span>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+            <button v-if="nextCursor" class="load-more" type="button" :disabled="albumLoading" @click="loadTimeline({ append: true })">
+              {{ albumLoading ? '加载中...' : '加载更多' }}
             </button>
           </div>
-        </header>
-
-        <div v-if="fileError" class="notice error">{{ fileError }}</div>
-        <div v-else-if="fileLoading" class="notice">正在加载文件列表...</div>
-        <div v-else-if="visibleEntries.length === 0" class="notice">当前文件夹为空</div>
-
-        <div v-else class="file-list">
-          <article
-            v-for="entry in visibleEntries"
-            :key="entry.path"
-            class="file-row"
-            role="button"
-            tabindex="0"
-            @click="openEntry(entry)"
-            @keydown.enter="openEntry(entry)"
-          >
-            <span class="file-icon" :class="fileType(entry)">
-              <component :is="fileIcon(entry)" :size="20" />
-            </span>
-            <div class="file-main">
-              <strong>{{ entry.name }}</strong>
-              <span>{{ entry.type === 'folder' ? '文件夹' : '文件' }}</span>
-            </div>
-            <span class="file-size">{{ entry.size }}</span>
-            <span class="row-action">
-              <ChevronRight v-if="entry.type === 'folder'" :size="16" />
-              <ArrowDownToLine v-else :size="16" />
-            </span>
-          </article>
-        </div>
+        </section>
       </section>
-    </section>
-
-    <!-- ═══════════ ALBUM VIEW ═══════════ -->
-    <section v-else class="workspace album-layout">
-      <aside class="side-panel album-sidebar">
-        <button class="scan-button" type="button" :disabled="scanLoading || scanStatus.status === 'scanning'" @click="startScan">
-          <LoaderCircle v-if="scanStatus.status === 'scanning'" class="spin" :size="16" />
-          <RefreshCw v-else :size="16" />
-          {{ scanStatus.status === 'scanning' ? '扫描中...' : '刷新索引' }}
-        </button>
-
-        <div class="scan-card">
-          <span>扫描状态</span>
-          <strong>{{ scanStatus.status === 'scanning' ? '进行中' : scanStatus.status === 'done' ? '已完成' : scanStatus.status || '空闲' }}</strong>
-          <small>已发现 {{ scanStatus.totalSeen ?? 0 }}，已移除 {{ scanStatus.totalRemoved ?? 0 }}</small>
-        </div>
-
-        <div class="filter-block">
-          <label>媒体类型</label>
-          <select v-model="selectedMedia" @change="setAlbumFilter">
-            <option value="all">全部媒体</option>
-            <option value="image">图片</option>
-            <option value="video">视频</option>
-            <option value="raw">RAW</option>
-          </select>
-        </div>
-
-        <div class="filter-block">
-          <label>文件夹</label>
-          <select v-model="selectedFolder" @change="setAlbumFilter">
-            <option value="">全部文件夹</option>
-            <option v-for="folder in folders" :key="folder.relativePath" :value="folder.relativePath">
-              {{ folder.relativePath || '/' }}
-            </option>
-          </select>
-        </div>
-
-        <label class="check-row">
-          <input v-model="favoriteOnly" type="checkbox" @change="setAlbumFilter" />
-          仅显示收藏
-        </label>
-
-        <div class="album-mini-stats">
-          <strong>索引统计</strong>
-          <span>{{ albumCounts.imageCount }} 张图片</span>
-          <span>{{ albumCounts.videoCount }} 个视频</span>
-          <span>{{ albumCounts.rawCount }} 个 RAW</span>
-          <small>当前网格已加载 {{ albumItems.length }} 项</small>
-        </div>
-      </aside>
-
-      <section class="panel album-panel">
-        <header class="panel-head album-head">
-          <label class="search-box wide">
-            <Search :size="16" />
-            <input v-model="albumQuery" type="search" placeholder="搜索已加载的媒体..." />
-          </label>
-          <button class="ghost-button" type="button" @click="reloadAlbum">
-            <RefreshCw :size="15" />
-            重新加载
-          </button>
-        </header>
-
-        <div v-if="albumError" class="notice error">{{ albumError }}</div>
-        <div v-else-if="albumLoading && albumItems.length === 0" class="notice">正在加载相册...</div>
-        <div v-else-if="albumItems.length === 0" class="empty-album">
-          <Sparkles :size="32" />
-          <strong>暂无索引媒体</strong>
-          <span>点击「刷新索引」来扫描共享文件夹中的 JPG、PNG、WebP、MP4 和 RAW 文件。</span>
-        </div>
-
-        <div v-else class="timeline">
-          <section v-for="group in groupedAlbumItems" :key="group.key" class="day-group">
-            <h2>{{ group.key }}</h2>
-            <div class="album-grid">
-              <article v-for="item in group.items" :key="item.id" class="album-card" @click="previewItem = item">
-                <div class="thumb">
-                  <img
-                    v-if="item.mediaType === 'image' && item.thumbnailStatus === 'ready'"
-                    :src="item.thumbnailUrl"
-                    :alt="item.fileName"
-                    loading="lazy"
-                  />
-                  <component v-else :is="mediaIcon(item.mediaType)" :size="32" />
-                  <span class="media-badge">
-                    <component :is="mediaIcon(item.mediaType)" :size="12" />
-                    {{ item.mediaType === 'image' ? '图片' : item.mediaType === 'video' ? '视频' : 'RAW' }}
-                  </span>
-                </div>
-                <div class="album-card-foot">
-                  <strong>{{ item.fileName }}</strong>
-                  <button class="favorite-button" :class="{ active: item.isFavorite }" type="button" @click.stop="toggleFavorite(item)">
-                    <Heart :size="14" :fill="item.isFavorite ? 'currentColor' : 'none'" />
-                  </button>
-                </div>
-                <div v-if="visibleTags(item).length" class="tag-row">
-                  <span v-for="tag in visibleTags(item)" :key="tag.tag" :class="{ derived: tag.derived }">
-                    {{ tag.tag }}
-                  </span>
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <button v-if="nextCursor" class="load-more" type="button" :disabled="albumLoading" @click="loadTimeline({ append: true })">
-            {{ albumLoading ? '加载中...' : '加载更多' }}
-          </button>
-        </div>
-      </section>
-    </section>
+    </Transition>
 
     <!-- ═══════════ PREVIEW MODAL ═══════════ -->
-    <div v-if="previewItem" class="preview-backdrop" @click.self="previewItem = null">
-      <article class="preview">
-        <button class="close-button" type="button" @click="previewItem = null">
-          <X :size="18" />
-        </button>
-        <div class="preview-media">
-          <img v-if="previewItem.mediaType === 'image'" :src="previewItem.thumbnailUrl" :alt="previewItem.fileName" />
-          <video v-else-if="previewItem.mediaType === 'video'" :src="previewItem.downloadUrl" controls />
-          <div v-else class="raw-preview">
-            <Layers :size="48" />
-            <span>RAW 文件暂不支持预览</span>
+    <Transition name="view" type="animation" :duration="{ enter: 450, leave: 250 }">
+      <div v-if="previewItem" key="preview" class="preview-backdrop" @click.self="previewItem = null">
+        <article class="preview">
+          <button class="close-button" type="button" @click="previewItem = null">
+            <X :size="18" />
+          </button>
+          <div class="preview-media">
+            <img v-if="previewItem.mediaType === 'image'" :src="previewItem.thumbnailUrl" :alt="previewItem.fileName" />
+            <video v-else-if="previewItem.mediaType === 'video'" :src="previewItem.downloadUrl" controls />
+            <div v-else class="raw-preview">
+              <Layers :size="48" />
+              <span>RAW 文件暂不支持预览</span>
+            </div>
           </div>
+          <div class="preview-info">
+            <h2>{{ previewItem.fileName }}</h2>
+            <p>{{ previewItem.folderPath || '/' }}</p>
+            <dl>
+              <div><dt>类型</dt><dd>{{ previewItem.mediaType === 'image' ? '图片' : previewItem.mediaType === 'video' ? '视频' : 'RAW' }}</dd></div>
+              <div><dt>大小</dt><dd>{{ formatBytes(previewItem.sizeBytes) }}</dd></div>
+              <div><dt>时间</dt><dd>{{ formatDateTime(previewItem.capturedAt || previewItem.modifiedAt) }}</dd></div>
+            </dl>
+            <div v-if="visibleTags(previewItem).length" class="preview-tags">
+              <span v-for="tag in visibleTags(previewItem)" :key="tag.tag" :class="{ derived: tag.derived }">
+                {{ tag.tag }}
+              </span>
+            </div>
+            <div class="preview-actions">
+              <button class="ghost-button danger-button" type="button" @click="deletePhoto(previewItem)">
+                <Trash2 :size="15" />
+                删除
+              </button>
+              <a class="dark-button" :href="previewItem.downloadUrl">
+                <ArrowDownToLine :size="15" />
+                下载文件
+              </a>
+              <button class="ghost-button" type="button" @click="toggleFavorite(previewItem)">
+                <Heart :size="15" :fill="previewItem.isFavorite ? 'currentColor' : 'none'" />
+                {{ previewItem.isFavorite ? '已收藏' : '收藏' }}
+              </button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </Transition>
+
+    <!-- Bottom Action Bar for Batch Selection -->
+    <Transition name="slide-up">
+      <div v-if="isSelectMode" class="bottom-action-bar">
+        <div class="selection-info">
+          已选择 {{ selectedIds.size }} 项
         </div>
-        <div class="preview-info">
-          <h2>{{ previewItem.fileName }}</h2>
-          <p>{{ previewItem.folderPath || '/' }}</p>
-          <dl>
-            <div><dt>类型</dt><dd>{{ previewItem.mediaType === 'image' ? '图片' : previewItem.mediaType === 'video' ? '视频' : 'RAW' }}</dd></div>
-            <div><dt>大小</dt><dd>{{ formatBytes(previewItem.sizeBytes) }}</dd></div>
-            <div><dt>时间</dt><dd>{{ formatDateTime(previewItem.capturedAt || previewItem.modifiedAt) }}</dd></div>
-          </dl>
-          <div v-if="visibleTags(previewItem).length" class="preview-tags">
-            <span v-for="tag in visibleTags(previewItem)" :key="tag.tag" :class="{ derived: tag.derived }">
-              {{ tag.tag }}
-            </span>
-          </div>
-          <div class="preview-actions">
-            <a class="dark-button" :href="previewItem.downloadUrl">
-              <ArrowDownToLine :size="15" />
-              下载文件
-            </a>
-            <button class="ghost-button" type="button" @click="toggleFavorite(previewItem)">
-              <Heart :size="15" :fill="previewItem.isFavorite ? 'currentColor' : 'none'" />
-              {{ previewItem.isFavorite ? '已收藏' : '收藏' }}
-            </button>
-          </div>
+        <div class="actions">
+          <button class="ghost-button danger-button" :disabled="selectedIds.size === 0" type="button" @click="deleteSelectedPhotos">
+            <Trash2 :size="16" />
+            删除
+          </button>
         </div>
-      </article>
-    </div>
+      </div>
+    </Transition>
   </main>
 </template>

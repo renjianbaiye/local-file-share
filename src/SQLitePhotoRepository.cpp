@@ -496,6 +496,14 @@ void SQLitePhotoRepository::toggleFavorite(int64_t id, bool favorite) {
     stepDone(db_, stmt.get());
 }
 
+void SQLitePhotoRepository::deletePhoto(int64_t id) {
+    open();
+    // photo_tags are deleted automatically via ON DELETE CASCADE
+    Statement stmt(db_, "DELETE FROM photos WHERE id = ?;");
+    sqlite3_bind_int64(stmt.get(), 1, id);
+    stepDone(db_, stmt.get());
+}
+
 void SQLitePhotoRepository::refreshFolderStats(const std::string& folder_path) const {
     Statement stmt(db_,
         "INSERT INTO folders (relative_path, photo_count, video_count, raw_count, "

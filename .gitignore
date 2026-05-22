@@ -107,3 +107,5 @@ backend-*.out
 min.err
 min.out
 
+start-dev.cmd
+project.zip
