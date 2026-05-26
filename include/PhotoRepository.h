@@ -45,6 +45,15 @@ struct TimelineQuery {
     std::optional<bool> missing;
 };
 
+struct PhotoSearchQuery {
+    std::string keyword;
+    int limit = 80;
+    std::string folder_path;
+    std::vector<std::string> media_types;
+    std::optional<bool> favorite;
+    std::optional<bool> missing = false;
+};
+
 struct FolderRecord {
     std::string relative_path;
     int64_t photo_count = 0;
@@ -65,6 +74,7 @@ public:
     virtual PhotoRecord getPhoto(int64_t id) const = 0;
     virtual PhotoRecord getPhotoByRelativePath(const std::string& relative_path) const = 0;
     virtual std::vector<PhotoRecord> listTimeline(const TimelineQuery& query) const = 0;
+    virtual std::vector<PhotoRecord> searchPhotos(const PhotoSearchQuery& query) const = 0;
     virtual std::vector<FolderRecord> listFolders() const = 0;
     virtual std::vector<std::string> listIndexedRelativePaths() const = 0;
     virtual void replacePhotoTags(const std::string& relative_path, const std::vector<PhotoTag>& tags) = 0;

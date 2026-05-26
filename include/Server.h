@@ -13,8 +13,9 @@ struct Options {
     std::wstring album_cv_python;
     std::wstring album_cv_root;
     std::wstring album_cv_device;
+    std::wstring album_cv_onnx;
 
-    Options() : share_dir(L"."), photo_db_path(), port(8080), host("0.0.0.0"), open_browser(true), no_auth(false), dev_mode(false), auth_token(), album_cv_python(), album_cv_root(), album_cv_device(L"cuda") {}
+    Options() : share_dir(L"."), photo_db_path(), port(8080), host("0.0.0.0"), open_browser(true), no_auth(false), dev_mode(false), auth_token(), album_cv_python(), album_cv_root(), album_cv_device(L"cuda"), album_cv_onnx() {}
 };
 
 class Server {

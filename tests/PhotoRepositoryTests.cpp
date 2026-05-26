@@ -69,9 +69,36 @@ int main() {
             assert(tags[0].tag == "person");
             assert(tags[0].predicted == true);
 
+            PhotoRecord second = photo;
+            second.relative_path = "garden/flower.JPG";
+            second.absolute_path_hash = "flower-hash";
+            second.file_name = "flower.JPG";
+            second.folder_path = "garden";
+            second.indexed_at = 1779166830;
+            repository.upsertPhoto(second);
+
+            PhotoTag flower_tag;
+            flower_tag.tag = "scenery";
+            flower_tag.probability = 0.93;
+            flower_tag.threshold = 0.75;
+            flower_tag.predicted = true;
+            repository.replacePhotoTags("garden/flower.JPG", {flower_tag});
+
+            PhotoSearchQuery search;
+            search.keyword = "scenery";
+            search.limit = 10;
+            auto search_results = repository.searchPhotos(search);
+            assert(search_results.size() == 1);
+            assert(search_results[0].relative_path == "garden/flower.JPG");
+
             repository.markMissing("camera/DSC_0001.JPG");
             stored = repository.getPhoto(stored.id);
             assert(stored.missing == true);
+
+            PhotoSearchQuery missing_search;
+            missing_search.keyword = "DSC";
+            missing_search.limit = 10;
+            assert(repository.searchPhotos(missing_search).empty());
         }
 
         std::filesystem::remove(cleanup_path);

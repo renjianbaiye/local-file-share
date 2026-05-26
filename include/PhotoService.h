@@ -32,9 +32,14 @@ public:
 
 private:
     ScanStatus beginScan();
+    ScanStatus beginScanPass();
+    ScanStatus scanOnce(ScanStatus current);
+    void runAsyncScans(ScanStatus current);
     void finishScan(const ScanStatus& status);
+    void publishScanProgress(const ScanStatus& status);
     PhotoRecord buildRecord(const std::wstring& file_path, int64_t indexed_at) const;
-    void tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path) const;
+    bool shouldTagPhoto(const PhotoRecord& photo) const;
+    void tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path, bool force) const;
 
     std::wstring share_root_;
     PhotoRepository& repository_;
@@ -42,4 +47,5 @@ private:
     mutable std::mutex status_mutex_;
     ScanStatus status_;
     std::atomic<bool> scanning_{false};
+    std::atomic<bool> scan_requested_{false};
 };

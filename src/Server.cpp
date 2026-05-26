@@ -419,7 +419,36 @@ static TimelineQuery timeline_query_from_request(const httplib::Request& req) {
     return query;
 }
 
-static std::string timeline_json(const std::vector<PhotoRecord>& photos, int requested_limit, const PhotoRepository& repository) {
+static PhotoSearchQuery photo_search_query_from_request(const httplib::Request& req) {
+    PhotoSearchQuery query;
+    query.limit = 80;
+    query.missing = false;
+    if (req.has_param("q")) {
+        query.keyword = req.get_param_value("q");
+    }
+    if (req.has_param("limit")) {
+        try { query.limit = std::stoi(req.get_param_value("limit")); } catch (...) {}
+    }
+    if (req.has_param("folder")) {
+        query.folder_path = req.get_param_value("folder");
+    }
+    if (req.has_param("media")) {
+        query.media_types = split_csv(req.get_param_value("media"));
+    }
+    if (req.has_param("favorite")) {
+        std::string value = req.get_param_value("favorite");
+        if (value == "1" || value == "true") {
+            query.favorite = true;
+        }
+    }
+    return query;
+}
+
+static std::string timeline_json(
+    const std::vector<PhotoRecord>& photos,
+    int requested_limit,
+    const PhotoRepository& repository,
+    bool include_next_cursor = true) {
     std::ostringstream out;
     out << "{\"items\":[";
     for (size_t i = 0; i < photos.size(); ++i) {
@@ -429,7 +458,7 @@ static std::string timeline_json(const std::vector<PhotoRecord>& photos, int req
         out << photo_json(photos[i], repository.listPhotoTags(photos[i].id));
     }
     out << "],\"nextCursor\":";
-    if (requested_limit > 0 && photos.size() >= static_cast<size_t>(requested_limit)) {
+    if (include_next_cursor && requested_limit > 0 && photos.size() >= static_cast<size_t>(requested_limit)) {
         const PhotoRecord& last = photos.back();
         int64_t sort_time = last.captured_at.value_or(last.modified_at);
         out << "\"" << sort_time << ':' << last.id << "\"";
@@ -482,12 +511,20 @@ int Server::run(const Options& options) {
     tagger_options.log_path = L"C:\\Code\\CppCode\\local-file-share\\tagger-last.log";
 
     OnnxPhotoTaggerOptions onnx_options;
-    onnx_options.model_path =
-        L"C:\\Code\\CppCode\\local-file-share\\models\\smart_album_tags_v2\\smart_album_tags_v2.onnx";
+    onnx_options.model_path = options.album_cv_onnx.empty()
+        ? (std::filesystem::path(L"C:\\Code\\CppCode\\local-file-share") /
+           L"models" /
+           L"dinov2_album_tagger_v3" /
+           L"dinov2_album_tagger_v3.onnx").wstring()
+        : options.album_cv_onnx;
     std::unique_ptr<PhotoTagger> photo_tagger = create_photo_tagger(onnx_options, tagger_options);
     PhotoService photo_service(options.share_dir, photo_repository, photo_tagger.get());
 
     httplib::Server server;
+    server.set_payload_max_length(0);
+    server.set_read_timeout(10 * 60, 0);
+    server.set_write_timeout(10 * 60, 0);
+    server.set_keep_alive_timeout(10 * 60);
     std::string lan_ip = detect_lan_ipv4();
 
     // Generate auth token (empty string when auth is disabled)
@@ -625,6 +662,18 @@ int Server::run(const Options& options) {
             TimelineQuery query = timeline_query_from_request(req);
             std::vector<PhotoRecord> photos = photo_repository.listTimeline(query);
             res.set_content(timeline_json(photos, query.limit <= 0 ? 100 : std::min(query.limit, 500), photo_repository),
+                            "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Get("/api/photos/search", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            PhotoSearchQuery query = photo_search_query_from_request(req);
+            std::vector<PhotoRecord> photos = photo_repository.searchPhotos(query);
+            int requested_limit = query.limit <= 0 ? 80 : std::min(query.limit, 200);
+            res.set_content(timeline_json(photos, requested_limit, photo_repository, false),
                             "application/json; charset=utf-8");
         } catch (const std::exception& ex) {
             send_error(res, 500, ex.what());

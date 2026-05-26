@@ -2,6 +2,7 @@
 
 #include "PhotoRepository.h"
 
+#include <mutex>
 #include <string>
 
 struct sqlite3;
@@ -22,6 +23,7 @@ public:
     PhotoRecord getPhoto(int64_t id) const override;
     PhotoRecord getPhotoByRelativePath(const std::string& relative_path) const override;
     std::vector<PhotoRecord> listTimeline(const TimelineQuery& query) const override;
+    std::vector<PhotoRecord> searchPhotos(const PhotoSearchQuery& query) const override;
     std::vector<FolderRecord> listFolders() const override;
     std::vector<std::string> listIndexedRelativePaths() const override;
     void replacePhotoTags(const std::string& relative_path, const std::vector<PhotoTag>& tags) override;
@@ -37,4 +39,5 @@ private:
 
     std::wstring db_path_;
     mutable sqlite3* db_ = nullptr;
+    mutable std::recursive_mutex mutex_;
 };

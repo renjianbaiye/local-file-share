@@ -124,6 +124,18 @@ const char* photoColumns() {
            "indexed_at, missing";
 }
 
+std::string qualifiedPhotoColumns(const char* alias) {
+    std::string prefix(alias);
+    prefix += ".";
+    return prefix + "id, " + prefix + "relative_path, " + prefix + "absolute_path_hash, " +
+           prefix + "file_name, " + prefix + "folder_path, " + prefix + "extension, " +
+           prefix + "media_type, " + prefix + "mime_type, " + prefix + "size_bytes, " +
+           prefix + "modified_at, " + prefix + "captured_at, " + prefix + "width, " +
+           prefix + "height, " + prefix + "orientation, " + prefix + "content_hash, " +
+           prefix + "thumbnail_status, " + prefix + "thumbnail_path, " +
+           prefix + "is_favorite, " + prefix + "indexed_at, " + prefix + "missing";
+}
+
 void stepDone(sqlite3* db, sqlite3_stmt* stmt) {
     if (sqlite3_step(stmt) != SQLITE_DONE) {
         throw std::runtime_error(sqlite3_errmsg(db));
@@ -163,6 +175,7 @@ void SQLitePhotoRepository::exec(const char* sql) const {
 }
 
 void SQLitePhotoRepository::initialize() {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     exec("PRAGMA foreign_keys = ON;");
     exec("PRAGMA journal_mode = WAL;");
@@ -240,6 +253,7 @@ void SQLitePhotoRepository::initialize() {
             "CREATE INDEX IF NOT EXISTS idx_photos_missing ON photos(missing);"
             "CREATE INDEX IF NOT EXISTS idx_jobs_status_type ON jobs(status, job_type);"
             "CREATE INDEX IF NOT EXISTS idx_photo_tags_tag ON photo_tags(tag);"
+            "CREATE INDEX IF NOT EXISTS idx_photo_tags_predicted_tag ON photo_tags(predicted, tag, photo_id);"
             "PRAGMA user_version = 2;"
         );
         exec("COMMIT;");
@@ -250,6 +264,7 @@ void SQLitePhotoRepository::initialize() {
 }
 
 int SQLitePhotoRepository::schemaVersion() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_, "PRAGMA user_version;");
     if (sqlite3_step(stmt.get()) != SQLITE_ROW) {
@@ -259,6 +274,7 @@ int SQLitePhotoRepository::schemaVersion() const {
 }
 
 bool SQLitePhotoRepository::hasTable(const std::string& table_name) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_, "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ? LIMIT 1;");
     bindText(stmt.get(), 1, table_name);
@@ -266,6 +282,7 @@ bool SQLitePhotoRepository::hasTable(const std::string& table_name) const {
 }
 
 void SQLitePhotoRepository::upsertPhoto(const PhotoRecord& photo) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_,
         "INSERT INTO photos (relative_path, absolute_path_hash, file_name, folder_path, extension, "
@@ -316,6 +333,7 @@ void SQLitePhotoRepository::upsertPhoto(const PhotoRecord& photo) {
 }
 
 PhotoRecord SQLitePhotoRepository::getPhoto(int64_t id) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     std::string sql = std::string("SELECT ") + photoColumns() + " FROM photos WHERE id = ?;";
     Statement stmt(db_, sql.c_str());
@@ -327,6 +345,7 @@ PhotoRecord SQLitePhotoRepository::getPhoto(int64_t id) const {
 }
 
 PhotoRecord SQLitePhotoRepository::getPhotoByRelativePath(const std::string& relative_path) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     std::string sql = std::string("SELECT ") + photoColumns() + " FROM photos WHERE relative_path = ?;";
     Statement stmt(db_, sql.c_str());
@@ -338,6 +357,7 @@ PhotoRecord SQLitePhotoRepository::getPhotoByRelativePath(const std::string& rel
 }
 
 std::vector<PhotoRecord> SQLitePhotoRepository::listTimeline(const TimelineQuery& query) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     int limit = query.limit <= 0 ? 100 : query.limit;
     if (limit > 500) {
@@ -397,7 +417,71 @@ std::vector<PhotoRecord> SQLitePhotoRepository::listTimeline(const TimelineQuery
     return photos;
 }
 
+std::vector<PhotoRecord> SQLitePhotoRepository::searchPhotos(const PhotoSearchQuery& query) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    open();
+    int limit = query.limit <= 0 ? 80 : query.limit;
+    if (limit > 200) {
+        limit = 200;
+    }
+
+    std::string sql = std::string("SELECT DISTINCT ") + qualifiedPhotoColumns("photos") +
+        " FROM photos LEFT JOIN photo_tags ON photo_tags.photo_id = photos.id "
+        "WHERE 1 = 1";
+    if (!query.keyword.empty()) {
+        sql += " AND (photos.file_name LIKE ? OR photos.folder_path LIKE ? OR photos.relative_path LIKE ? "
+               "OR (photo_tags.predicted = 1 AND photo_tags.tag LIKE ?))";
+    }
+    if (!query.folder_path.empty()) {
+        sql += " AND photos.folder_path = ?";
+    }
+    if (query.favorite.has_value()) {
+        sql += " AND photos.is_favorite = ?";
+    }
+    if (query.missing.has_value()) {
+        sql += " AND photos.missing = ?";
+    }
+    if (!query.media_types.empty()) {
+        sql += " AND photos.media_type IN (";
+        for (size_t i = 0; i < query.media_types.size(); ++i) {
+            sql += i == 0 ? "?" : ", ?";
+        }
+        sql += ")";
+    }
+    sql += " ORDER BY COALESCE(photos.captured_at, photos.modified_at) DESC, photos.id DESC LIMIT ?;";
+
+    Statement stmt(db_, sql.c_str());
+    int index = 1;
+    if (!query.keyword.empty()) {
+        std::string pattern = "%" + query.keyword + "%";
+        bindText(stmt.get(), index++, pattern);
+        bindText(stmt.get(), index++, pattern);
+        bindText(stmt.get(), index++, pattern);
+        bindText(stmt.get(), index++, pattern);
+    }
+    if (!query.folder_path.empty()) {
+        bindText(stmt.get(), index++, query.folder_path);
+    }
+    if (query.favorite.has_value()) {
+        sqlite3_bind_int(stmt.get(), index++, *query.favorite ? 1 : 0);
+    }
+    if (query.missing.has_value()) {
+        sqlite3_bind_int(stmt.get(), index++, *query.missing ? 1 : 0);
+    }
+    for (const std::string& media_type : query.media_types) {
+        bindText(stmt.get(), index++, media_type);
+    }
+    sqlite3_bind_int(stmt.get(), index, limit);
+
+    std::vector<PhotoRecord> photos;
+    while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+        photos.push_back(readPhoto(stmt.get()));
+    }
+    return photos;
+}
+
 std::vector<FolderRecord> SQLitePhotoRepository::listFolders() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_,
         "SELECT relative_path, photo_count, video_count, raw_count, latest_captured_at, "
@@ -421,6 +505,7 @@ std::vector<FolderRecord> SQLitePhotoRepository::listFolders() const {
 }
 
 std::vector<std::string> SQLitePhotoRepository::listIndexedRelativePaths() const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_, "SELECT relative_path FROM photos WHERE missing = 0;");
     std::vector<std::string> paths;
@@ -431,6 +516,7 @@ std::vector<std::string> SQLitePhotoRepository::listIndexedRelativePaths() const
 }
 
 void SQLitePhotoRepository::replacePhotoTags(const std::string& relative_path, const std::vector<PhotoTag>& tags) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     PhotoRecord photo = getPhotoByRelativePath(relative_path);
     exec("BEGIN;");
     try {
@@ -460,6 +546,7 @@ void SQLitePhotoRepository::replacePhotoTags(const std::string& relative_path, c
 }
 
 std::vector<PhotoTag> SQLitePhotoRepository::listPhotoTags(int64_t photo_id) const {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_,
         "SELECT tag, probability, threshold_value, predicted, derived "
@@ -481,6 +568,7 @@ std::vector<PhotoTag> SQLitePhotoRepository::listPhotoTags(int64_t photo_id) con
 }
 
 void SQLitePhotoRepository::markMissing(const std::string& relative_path) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     PhotoRecord photo = getPhotoByRelativePath(relative_path);
     Statement stmt(db_, "UPDATE photos SET missing = 1 WHERE relative_path = ?;");
     bindText(stmt.get(), 1, relative_path);
@@ -489,6 +577,7 @@ void SQLitePhotoRepository::markMissing(const std::string& relative_path) {
 }
 
 void SQLitePhotoRepository::toggleFavorite(int64_t id, bool favorite) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     Statement stmt(db_, "UPDATE photos SET is_favorite = ? WHERE id = ?;");
     sqlite3_bind_int(stmt.get(), 1, favorite ? 1 : 0);
@@ -497,6 +586,7 @@ void SQLitePhotoRepository::toggleFavorite(int64_t id, bool favorite) {
 }
 
 void SQLitePhotoRepository::deletePhoto(int64_t id) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     open();
     // photo_tags are deleted automatically via ON DELETE CASCADE
     Statement stmt(db_, "DELETE FROM photos WHERE id = ?;");

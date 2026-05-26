@@ -1,0 +1,119 @@
+{
+  "model_name": "dinov2_large_album_tagger_v3",
+  "architecture": "dinov2_vitl14",
+  "checkpoint": "outputs\\dinov2_large_album_tagger_v3\\best.pth",
+  "onnx_file": "dinov2_album_tagger_v3.onnx",
+  "input": {
+    "name": "input",
+    "shape": [
+      "batch_size",
+      3,
+      224,
+      224
+    ],
+    "color": "RGB",
+    "resize": [
+      224,
+      224
+    ],
+    "mean": [
+      0.485,
+      0.456,
+      0.406
+    ],
+    "std": [
+      0.229,
+      0.224,
+      0.225
+    ]
+  },
+  "output": {
+    "name": "logits",
+    "activation": "sigmoid",
+    "labels": [
+      "person",
+      "portrait",
+      "landmark",
+      "scenery",
+      "city_view",
+      "street",
+      "building",
+      "architecture",
+      "temple_or_historic",
+      "sea_or_lake",
+      "river_or_water",
+      "mountain",
+      "forest",
+      "sky",
+      "beach",
+      "park",
+      "indoor",
+      "restaurant",
+      "hotel",
+      "museum",
+      "station_or_airport",
+      "vehicle_or_transport",
+      "night",
+      "food",
+      "pet",
+      "document_or_screen",
+      "screenshot"
+    ],
+    "thresholds": {
+      "person": 0.5199999213218689,
+      "portrait": 0.49999991059303284,
+      "landmark": 0.2799999713897705,
+      "scenery": 0.7499998807907104,
+      "city_view": 0.7599998712539673,
+      "street": 0.8099998831748962,
+      "building": 0.2999999523162842,
+      "architecture": 0.8799998164176941,
+      "temple_or_historic": 0.7599998712539673,
+      "sea_or_lake": 0.8799998164176941,
+      "river_or_water": 0.7999998331069946,
+      "mountain": 0.8799998164176941,
+      "forest": 0.8499998450279236,
+      "sky": 0.5799999237060547,
+      "beach": 0.8699998259544373,
+      "park": 0.929999828338623,
+      "indoor": 0.6999998688697815,
+      "restaurant": 0.8399998545646667,
+      "hotel": 0.9499998092651367,
+      "museum": 0.9399998188018799,
+      "station_or_airport": 0.7399998903274536,
+      "vehicle_or_transport": 0.75,
+      "night": 0.6099998950958252,
+      "food": 0.34999996423721313,
+      "pet": 0.5699998736381531,
+      "document_or_screen": 0.75,
+      "screenshot": 0.6399998664855957
+    }
+  },
+  "derived_tags": {
+    "people_photo": [
+      "person",
+      "portrait"
+    ],
+    "travel_signals": [
+      "scenery",
+      "city_view",
+      "street",
+      "landmark",
+      "building",
+      "architecture",
+      "temple_or_historic",
+      "sea_or_lake",
+      "river_or_water",
+      "mountain",
+      "forest",
+      "sky",
+      "beach",
+      "park",
+      "station_or_airport"
+    ],
+    "text_or_screen": [
+      "document_or_screen",
+      "screenshot"
+    ]
+  }
+}

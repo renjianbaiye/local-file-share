@@ -52,9 +52,15 @@ PhotoService::PhotoService(std::wstring share_root, PhotoRepository& repository,
 ScanStatus PhotoService::beginScan() {
     bool expected = false;
     if (!scanning_.compare_exchange_strong(expected, true)) {
+        scan_requested_ = true;
         return latestStatus();
     }
 
+    scan_requested_ = false;
+    return beginScanPass();
+}
+
+ScanStatus PhotoService::beginScanPass() {
     ScanStatus current;
     current.status = "scanning";
     current.started_at = unix_time_now();
@@ -71,6 +77,11 @@ void PhotoService::finishScan(const ScanStatus& status) {
         status_ = status;
     }
     scanning_ = false;
+}
+
+void PhotoService::publishScanProgress(const ScanStatus& status) {
+    std::lock_guard<std::mutex> lock(status_mutex_);
+    status_ = status;
 }
 
 std::string PhotoService::mediaTypeForExtension(const std::wstring& extension) {
@@ -111,8 +122,25 @@ PhotoRecord PhotoService::buildRecord(const std::wstring& file_path, int64_t ind
     return photo;
 }
 
-void PhotoService::tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path) const {
+bool PhotoService::shouldTagPhoto(const PhotoRecord& photo) const {
     if (tagger_ == nullptr || !tagger_->available() || photo.media_type != "image") {
+        return false;
+    }
+
+    try {
+        PhotoRecord existing = repository_.getPhotoByRelativePath(photo.relative_path);
+        if (existing.size_bytes == photo.size_bytes && existing.modified_at == photo.modified_at) {
+            return repository_.listPhotoTags(existing.id).empty();
+        }
+    } catch (...) {
+        return true;
+    }
+
+    return true;
+}
+
+void PhotoService::tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path, bool force) const {
+    if (!force || tagger_ == nullptr || !tagger_->available() || photo.media_type != "image") {
         return;
     }
 
@@ -123,12 +151,7 @@ void PhotoService::tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstr
     }
 }
 
-ScanStatus PhotoService::scanNow() {
-    ScanStatus current = beginScan();
-    if (current.status != "scanning") {
-        return current;
-    }
-
+ScanStatus PhotoService::scanOnce(ScanStatus current) {
     try {
         std::set<std::string> seen;
         const int64_t indexed_at = unix_time_now();
@@ -145,10 +168,14 @@ ScanStatus PhotoService::scanNow() {
 
             PhotoRecord photo = buildRecord(entry.path().wstring(), indexed_at);
             seen.insert(photo.relative_path);
+            bool needs_tagging = shouldTagPhoto(photo);
             repository_.upsertPhoto(photo);
-            tagPhotoIfAvailable(photo, entry.path().wstring());
+            tagPhotoIfAvailable(photo, entry.path().wstring(), needs_tagging);
             ++current.total_seen;
             ++current.total_indexed;
+            if (current.total_seen % 5 == 0) {
+                publishScanProgress(current);
+            }
         }
 
         for (const std::string& indexed_path : repository_.listIndexedRelativePaths()) {
@@ -165,9 +192,45 @@ ScanStatus PhotoService::scanNow() {
         current.finished_at = unix_time_now();
         current.error_message = ex.what();
     }
+    return current;
+}
+
+ScanStatus PhotoService::scanNow() {
+    ScanStatus current = beginScan();
+    if (current.status != "scanning") {
+        return current;
+    }
+
+    current = scanOnce(current);
 
     finishScan(current);
     return current;
+}
+
+void PhotoService::runAsyncScans(ScanStatus current) {
+    while (true) {
+        current = scanOnce(current);
+        if (current.status == "failed") {
+            finishScan(current);
+            return;
+        }
+
+        if (scan_requested_.exchange(false)) {
+            current = beginScanPass();
+            continue;
+        }
+
+        finishScan(current);
+        if (!scan_requested_.exchange(false)) {
+            return;
+        }
+
+        bool expected = false;
+        if (!scanning_.compare_exchange_strong(expected, true)) {
+            return;
+        }
+        current = beginScanPass();
+    }
 }
 
 ScanStatus PhotoService::startScanAsync() {
@@ -177,43 +240,7 @@ ScanStatus PhotoService::startScanAsync() {
     }
 
     std::thread([this, current]() mutable {
-        try {
-            std::set<std::string> seen;
-            const int64_t indexed_at = unix_time_now();
-
-            for (const fs::directory_entry& entry : fs::recursive_directory_iterator(share_root_)) {
-                if (!entry.is_regular_file()) {
-                    continue;
-                }
-
-                std::string media_type = mediaTypeForExtension(entry.path().extension().wstring());
-                if (media_type == "other") {
-                    continue;
-                }
-
-                PhotoRecord photo = buildRecord(entry.path().wstring(), indexed_at);
-                seen.insert(photo.relative_path);
-                repository_.upsertPhoto(photo);
-                tagPhotoIfAvailable(photo, entry.path().wstring());
-                ++current.total_seen;
-                ++current.total_indexed;
-            }
-
-            for (const std::string& indexed_path : repository_.listIndexedRelativePaths()) {
-                if (seen.find(indexed_path) == seen.end()) {
-                    repository_.markMissing(indexed_path);
-                    ++current.total_removed;
-                }
-            }
-
-            current.status = "completed";
-            current.finished_at = unix_time_now();
-        } catch (const std::exception& ex) {
-            current.status = "failed";
-            current.finished_at = unix_time_now();
-            current.error_message = ex.what();
-        }
-        finishScan(current);
+        runAsyncScans(current);
     }).detach();
 
     return current;

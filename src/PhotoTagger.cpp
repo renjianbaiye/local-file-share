@@ -217,6 +217,9 @@ std::vector<PhotoTag> derive_tags_from_probabilities(
     const std::set<std::string> travel_signals = {
         "landscape", "nature", "water", "mountain", "beach",
         "sky", "building", "landmark", "city",
+        "scenery", "city_view", "street", "architecture",
+        "temple_or_historic", "sea_or_lake", "river_or_water",
+        "forest", "park", "station_or_airport",
     };
 
     bool has_travel_signal = false;
@@ -240,7 +243,7 @@ std::vector<PhotoTag> derive_tags_from_probabilities(
     }
 
     if (predicted.count("screenshot") != 0 || predicted.count("document") != 0 ||
-        predicted.count("text_image") != 0) {
+        predicted.count("text_image") != 0 || predicted.count("document_or_screen") != 0) {
         add_derived("text_or_screen");
     }
 
@@ -360,12 +363,13 @@ public:
     explicit OnnxPhotoTagger(OnnxPhotoTaggerOptions options)
         : options_(std::move(options)),
           metadata_(load_model_metadata(options_.model_path)),
-          env_(ORT_LOGGING_LEVEL_WARNING, "LocalFileShareAlbumTags") {
+          env_(ORT_LOGGING_LEVEL_ERROR, "LocalFileShareAlbumTags") {
         if (!available()) {
             throw std::runtime_error("ONNX model is unavailable");
         }
 
         session_options_.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+        session_options_.SetLogSeverityLevel(ORT_LOGGING_LEVEL_ERROR);
         Ort::CUDAProviderOptions cuda_options;
         cuda_options.Update({
             {"device_id", "0"},

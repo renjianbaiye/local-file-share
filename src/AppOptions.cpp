@@ -25,6 +25,7 @@ void print_usage() {
         << "  --album-cv-root <path>     Python album CV project root\n"
         << "  --album-cv-python <path>   Python executable for album CV inference\n"
         << "  --album-cv-device <value>  Inference device, default cuda\n"
+        << "  --album-cv-onnx <path>     ONNX album tagger model path\n"
         << "  --no-open          Do not open the browser automatically\n"
         << "  --no-auth          Disable token authentication (only allowed with 127.0.0.1/localhost)\n"
         << "  --dev              Dev mode: allow CORS from Vite dev server (127.0.0.1:5173)\n"
@@ -121,6 +122,15 @@ bool parse_options(int argc, wchar_t* argv[], Options& options, bool& help_reque
                 return false;
             }
             options.album_cv_device = argv[++i];
+            continue;
+        }
+
+        if (arg == L"--album-cv-onnx") {
+            if (i + 1 >= argc) {
+                std::cerr << "Missing value for --album-cv-onnx\n";
+                return false;
+            }
+            options.album_cv_onnx = argv[++i];
             continue;
         }
 

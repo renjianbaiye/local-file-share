@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, onBeforeUnmount, ref, nextTick } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, nextTick, watch } from 'vue'
 import {
   ArrowDownToLine,
   ChevronRight,
@@ -37,6 +37,7 @@ const fileLoading = ref(false)
 const isUploading = ref(false)
 const fileError = ref('')
 const fileQuery = ref('')
+const debouncedFileQuery = ref('')
 
 const albumItems = ref([])
 const folders = ref([])
@@ -45,6 +46,7 @@ const albumLoading = ref(false)
 const scanLoading = ref(false)
 const albumError = ref('')
 const albumQuery = ref('')
+const debouncedAlbumQuery = ref('')
 const selectedFolder = ref('')
 const selectedMedia = ref('all')
 const favoriteOnly = ref(false)
@@ -53,6 +55,13 @@ const previewItem = ref(null)
 const isSelectMode = ref(false)
 const selectedIds = ref(new Set())
 let scanPollTimer = null
+let fileSearchTimer = null
+let albumSearchTimer = null
+let uploadRefreshTimer = null
+let uploadRefreshInFlight = false
+let albumRefreshTimer = null
+let albumRefreshInFlight = false
+let scanPollFailures = 0
 
 /* ══════════════════════════════════════════════════════════
    Liquid Glass — Interactive Mouse Tracking
@@ -157,19 +166,13 @@ const handleThumbClick = (e, item) => {
    Business Logic (unchanged)
    ══════════════════════════════════════════════════════════ */
 const visibleEntries = computed(() => {
-  const keyword = fileQuery.value.trim().toLowerCase()
+  const keyword = debouncedFileQuery.value.trim().toLowerCase()
   if (!keyword) return entries.value
   return entries.value.filter((entry) => entry.name.toLowerCase().includes(keyword))
 })
 
 const filteredAlbumItems = computed(() => {
-  const keyword = albumQuery.value.trim().toLowerCase()
-  if (!keyword) return albumItems.value
-  return albumItems.value.filter((item) => {
-    return item.fileName.toLowerCase().includes(keyword) ||
-      item.folderPath.toLowerCase().includes(keyword) ||
-      visibleTags(item).some((tag) => tag.tag.toLowerCase().includes(keyword))
-  })
+  return albumItems.value
 })
 
 const groupedAlbumItems = computed(() => {
@@ -234,6 +237,39 @@ const loadDirectory = async (path = '') => {
   }
 }
 
+const refreshDirectorySnapshot = async (path = currentPath.value) => {
+  if (uploadRefreshInFlight) return
+  uploadRefreshInFlight = true
+
+  try {
+    const response = await fetch(apiPath(path))
+    if (!response.ok) return
+    const data = await response.json()
+    if ((data.currentPath || '') !== currentPath.value) return
+    parentPath.value = data.parentPath ?? null
+    accessUrl.value = data.accessUrl || ''
+    entries.value = data.entries || []
+    fileStats.value = data.stats || { folders: 0, files: 0, totalSize: '0 B' }
+  } catch {
+    // Keep the upload error focused on the upload request itself.
+  } finally {
+    uploadRefreshInFlight = false
+  }
+}
+
+const startUploadRefresh = () => {
+  if (uploadRefreshTimer) window.clearInterval(uploadRefreshTimer)
+  uploadRefreshTimer = window.setInterval(() => {
+    void refreshDirectorySnapshot()
+  }, 3000)
+}
+
+const stopUploadRefresh = () => {
+  if (!uploadRefreshTimer) return
+  window.clearInterval(uploadRefreshTimer)
+  uploadRefreshTimer = null
+}
+
 const loadScanStatus = async () => {
   const response = await fetch('/api/photos/scan/status')
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -257,40 +293,96 @@ const timelineUrl = (cursor = null) => {
   return `/api/photos/timeline?${params.toString()}`
 }
 
-const loadTimeline = async ({ append = false } = {}) => {
-  albumLoading.value = true
-  albumError.value = ''
+const searchUrl = () => {
+  const params = new URLSearchParams()
+  params.set('limit', '80')
+  params.set('q', debouncedAlbumQuery.value.trim())
+  if (selectedFolder.value) params.set('folder', selectedFolder.value)
+  if (selectedMedia.value !== 'all') params.set('media', selectedMedia.value)
+  if (favoriteOnly.value) params.set('favorite', '1')
+  return `/api/photos/search?${params.toString()}`
+}
+
+const loadTimeline = async ({ append = false, silent = false } = {}) => {
+  if (!silent) {
+    albumLoading.value = true
+    albumError.value = ''
+  }
 
   try {
-    const response = await fetch(timelineUrl(append ? nextCursor.value : null))
+    const isSearch = debouncedAlbumQuery.value.trim().length > 0
+    const response = await fetch(isSearch ? searchUrl() : timelineUrl(append ? nextCursor.value : null))
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const data = await response.json()
-    albumItems.value = append ? albumItems.value.concat(data.items || []) : data.items || []
-    nextCursor.value = data.nextCursor || null
+    albumItems.value = append && !isSearch ? albumItems.value.concat(data.items || []) : data.items || []
+    nextCursor.value = isSearch ? null : data.nextCursor || null
   } catch (error) {
-    albumError.value = `Cannot read album timeline: ${error.message}`
+    if (!silent) {
+      albumError.value = `Cannot read album timeline: ${error.message}`
+    }
   } finally {
-    albumLoading.value = false
+    if (!silent) {
+      albumLoading.value = false
+    }
   }
 }
 
 const reloadAlbum = async () => {
   await Promise.all([loadScanStatus(), loadFolders(), loadTimeline()])
+  if (scanStatus.value.status === 'scanning') {
+    pollScanStatus()
+  }
+}
+
+const refreshAlbumSnapshot = async () => {
+  if (albumRefreshInFlight) return
+  albumRefreshInFlight = true
+
+  try {
+    await Promise.all([
+      loadScanStatus(),
+      loadFolders(),
+      loadTimeline({ silent: true }),
+    ])
+  } catch {
+    // The scan poller handles user-visible scan connectivity errors.
+  } finally {
+    albumRefreshInFlight = false
+  }
+}
+
+const startAlbumAutoRefresh = () => {
+  if (albumRefreshTimer) window.clearInterval(albumRefreshTimer)
+  albumRefreshTimer = window.setInterval(() => {
+    void refreshAlbumSnapshot()
+  }, 5000)
+}
+
+const stopAlbumAutoRefresh = () => {
+  if (!albumRefreshTimer) return
+  window.clearInterval(albumRefreshTimer)
+  albumRefreshTimer = null
 }
 
 const pollScanStatus = () => {
   if (scanPollTimer) window.clearInterval(scanPollTimer)
+  scanPollFailures = 0
+  startAlbumAutoRefresh()
   scanPollTimer = window.setInterval(async () => {
     try {
       await loadScanStatus()
+      scanPollFailures = 0
       if (scanStatus.value.status !== 'scanning') {
         window.clearInterval(scanPollTimer)
         scanPollTimer = null
+        stopAlbumAutoRefresh()
         await reloadAlbum()
       }
-    } catch {
-      window.clearInterval(scanPollTimer)
-      scanPollTimer = null
+    } catch (error) {
+      scanPollFailures += 1
+      if (scanPollFailures >= 5) {
+        albumError.value = `Cannot read scan status: ${error.message}`
+      }
     }
   }, 1000)
 }
@@ -315,34 +407,48 @@ const startScan = async () => {
   }
 }
 
+const uploadFile = async (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`/api/upload?path=${encodeURIComponent(currentPath.value)}`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const msg = await response.text()
+    throw new Error(`${file.name}: ${msg || `HTTP ${response.status}`}`)
+  }
+}
+
+const formatUploadError = (error) => {
+  if (error instanceof TypeError && error.message === 'Failed to fetch') {
+    return 'request was interrupted before the server returned details. Check whether the backend is still running and whether the selected file is too large.'
+  }
+  return error.message
+}
+
 const handleUpload = async (event) => {
-  const files = event.target.files
-  if (!files || files.length === 0) return
+  const files = Array.from(event.target.files || [])
+  if (files.length === 0) return
 
   isUploading.value = true
   fileError.value = ''
-
-  const formData = new FormData()
-  for (let i = 0; i < files.length; i += 1) {
-    formData.append('file', files[i])
-  }
+  startUploadRefresh()
 
   try {
-    const response = await fetch(`/api/upload?path=${encodeURIComponent(currentPath.value)}`, {
-      method: 'POST',
-      body: formData,
-    })
-
-    if (!response.ok) {
-      const msg = await response.text()
-      throw new Error(msg || `HTTP ${response.status}`)
+    for (const file of files) {
+      await uploadFile(file)
+      await refreshDirectorySnapshot()
     }
 
     await loadDirectory(currentPath.value)
     await reloadAlbum()
   } catch (error) {
-    fileError.value = `Upload failed: ${error.message}`
+    fileError.value = `Upload failed: ${formatUploadError(error)}`
   } finally {
+    stopUploadRefresh()
     isUploading.value = false
     event.target.value = ''
   }
@@ -365,6 +471,22 @@ const setAlbumFilter = async () => {
   nextCursor.value = null
   await loadTimeline()
 }
+
+watch(fileQuery, (value) => {
+  if (fileSearchTimer) window.clearTimeout(fileSearchTimer)
+  fileSearchTimer = window.setTimeout(() => {
+    debouncedFileQuery.value = value
+  }, 150)
+})
+
+watch(albumQuery, (value) => {
+  if (albumSearchTimer) window.clearTimeout(albumSearchTimer)
+  albumSearchTimer = window.setTimeout(async () => {
+    debouncedAlbumQuery.value = value
+    nextCursor.value = null
+    await loadTimeline()
+  }, 250)
+})
 
 const toggleFavorite = async (item) => {
   const next = !item.isFavorite
@@ -458,6 +580,19 @@ const mediaIcon = (type) => {
   return Image
 }
 
+const scanStatusTitle = computed(() => {
+  if (scanStatus.value.status === 'scanning') return '扫描中'
+  if (scanStatus.value.status === 'completed') return '已完成'
+  if (scanStatus.value.status === 'failed') return '失败'
+  return '待扫描'
+})
+
+const scanStatusDetail = computed(() => {
+  if (scanStatus.value.status === 'scanning') return '进行中'
+  if (scanStatus.value.status === 'completed') return '已完成'
+  return scanStatus.value.status || '空闲'
+})
+
 const tagPriority = (tag, allTags) => {
   const hasPeoplePhoto = allTags.some((item) => item.tag === 'people_photo' && (item.predicted || item.derived))
   const priority = {
@@ -466,29 +601,191 @@ const tagPriority = (tag, allTags) => {
     food: 12,
     building: 15,
     landmark: 16,
+    city_view: 17,
     city: 17,
     mountain: 18,
     beach: 19,
-    water: 20,
+    sea_or_lake: 20,
+    river_or_water: 21,
+    water: 21,
     sky: 21,
-    nature: 22,
-    landscape: 23,
+    scenery: 22,
+    forest: 23,
+    park: 24,
+    nature: 24,
+    landscape: 25,
     indoor: 24,
-    night: 25,
+    restaurant: 25,
+    hotel: 26,
+    museum: 27,
+    station_or_airport: 28,
+    street: 29,
+    architecture: 30,
+    temple_or_historic: 31,
+    vehicle_or_transport: 32,
+    night: 33,
     text_or_screen: 30,
     document: 31,
     screenshot: 32,
     text_image: 33,
+    document_or_screen: 33,
     travel_checkin: 40,
     travel_or_scenery: 41,
     group_people: 50,
+    pet: 52,
   }
   if (tag.tag === 'person') return hasPeoplePhoto ? 11 : 60
   return priority[tag.tag] ?? (tag.derived ? 45 : 70)
 }
 
+const tagLabels = {
+  person: '人物',
+  portrait: '人像',
+  landmark: '地标',
+  scenery: '风景',
+  city_view: '城市',
+  street: '街景',
+  building: '建筑',
+  architecture: '建筑细节',
+  temple_or_historic: '古迹寺庙',
+  sea_or_lake: '海/湖',
+  river_or_water: '河流/水景',
+  mountain: '山景',
+  forest: '森林',
+  sky: '天空',
+  beach: '海滩',
+  park: '公园',
+  indoor: '室内',
+  restaurant: '餐厅',
+  hotel: '酒店',
+  museum: '博物馆',
+  station_or_airport: '车站/机场',
+  vehicle_or_transport: '交通工具',
+  night: '夜景',
+  food: '美食',
+  pet: '宠物',
+  document_or_screen: '文档/屏幕',
+  screenshot: '截图',
+  people_photo: '人物照片',
+  travel_or_scenery: '旅行/风景',
+  travel_checkin: '旅行打卡',
+  text_or_screen: '文字/屏幕',
+  group_people: '多人合照',
+
+  city: '城市',
+  landscape: '风景',
+  nature: '自然',
+  water: '水景',
+  text_image: '文字图片',
+  document: '文档',
+}
+
+const tagDisplayName = (tag) => tagLabels[tag.tag] || tag.tag
+
+const tagSearchText = (tag) => `${tag.tag} ${tagDisplayName(tag)}`.toLowerCase()
+
+const travelBaseTags = new Set([
+  'scenery',
+  'city_view',
+  'street',
+  'landmark',
+  'building',
+  'architecture',
+  'temple_or_historic',
+  'sea_or_lake',
+  'river_or_water',
+  'mountain',
+  'forest',
+  'sky',
+  'beach',
+  'park',
+  'station_or_airport',
+  'landscape',
+  'nature',
+  'water',
+  'city',
+])
+
+const urbanContextTags = new Set([
+  'city_view',
+  'street',
+  'landmark',
+  'architecture',
+  'temple_or_historic',
+  'station_or_airport',
+  'city',
+])
+
+const hasPredictedTag = (tags, names) => tags.some((tag) => names.has(tag.tag) && (tag.predicted || tag.derived))
+
+const hasHighConfidenceTag = (tags, name, minimumProbability) => {
+  return tags.some((tag) => tag.tag === name && (tag.predicted || tag.derived) && (tag.probability || 0) >= minimumProbability)
+}
+
+const hasReliableTextEvidence = (tags) => {
+  return hasPredictedTag(tags, new Set(['screenshot', 'document'])) ||
+    hasHighConfidenceTag(tags, 'text_image', 0.9)
+}
+
+const isDisplayableBaseTag = (tag, allTags) => {
+  const probability = tag.probability || 0
+
+  if (tag.tag === 'document_or_screen') {
+    return hasReliableTextEvidence(allTags)
+  }
+
+  if (tag.tag === 'text_image') {
+    return probability >= 0.9 || hasPredictedTag(allTags, new Set(['screenshot', 'document']))
+  }
+
+  if (tag.tag === 'vehicle_or_transport') {
+    return hasPredictedTag(allTags, urbanContextTags)
+  }
+
+  if (tag.tag === 'building') {
+    return probability >= 0.65 || hasPredictedTag(allTags, urbanContextTags)
+  }
+
+  if (tag.tag === 'pet') {
+    return probability >= 0.75
+  }
+
+  if (tag.tag === 'person') {
+    return probability >= 0.9 || hasPredictedTag(allTags, new Set(['people_photo']))
+  }
+
+  return true
+}
+
+const isDisplayableDerivedTag = (tag, displayableBaseTags) => {
+  const visibleNames = new Set(displayableBaseTags.map((item) => item.tag))
+
+  if (tag.tag === 'people_photo') {
+    return visibleNames.has('person') && visibleNames.has('portrait')
+  }
+
+  if (tag.tag === 'travel_or_scenery') {
+    return [...visibleNames].some((name) => travelBaseTags.has(name))
+  }
+
+  if (tag.tag === 'travel_checkin') {
+    return visibleNames.has('person') &&
+      visibleNames.has('portrait') &&
+      [...visibleNames].some((name) => travelBaseTags.has(name))
+  }
+
+  if (tag.tag === 'text_or_screen') {
+    return hasReliableTextEvidence(displayableBaseTags)
+  }
+
+  return true
+}
+
 const visibleTags = (item) => {
-  const tags = (item.tags || []).filter((tag) => tag.predicted || tag.derived)
+  const predictedTags = (item.tags || []).filter((tag) => tag.predicted || tag.derived)
+  const baseTags = predictedTags.filter((tag) => !tag.derived && isDisplayableBaseTag(tag, predictedTags))
+  const derivedTags = predictedTags.filter((tag) => tag.derived && isDisplayableDerivedTag(tag, baseTags))
+  const tags = baseTags.concat(derivedTags)
   return tags
     .slice()
     .sort((a, b) => {
@@ -545,10 +842,14 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('mousemove', handleGlobalMouseMove)
+  if (fileSearchTimer) window.clearTimeout(fileSearchTimer)
+  if (albumSearchTimer) window.clearTimeout(albumSearchTimer)
+  stopUploadRefresh()
   if (scanPollTimer) {
     window.clearInterval(scanPollTimer)
     scanPollTimer = null
   }
+  stopAlbumAutoRefresh()
 })
 </script>
 
@@ -605,7 +906,7 @@ onBeforeUnmount(() => {
           <span>已索引媒体</span>
         </article>
         <article @mousemove="handleStatMouseMove" @mouseleave="handleStatMouseLeave">
-          <strong>{{ scanStatus.status === 'scanning' ? '扫描中' : scanStatus.status === 'done' ? '已完成' : '待扫描' }}</strong>
+          <strong>{{ scanStatusTitle }}</strong>
           <span>扫描状态</span>
         </article>
       </div>
@@ -689,7 +990,7 @@ onBeforeUnmount(() => {
 
           <div class="scan-card">
             <span>扫描状态</span>
-            <strong>{{ scanStatus.status === 'scanning' ? '进行中' : scanStatus.status === 'done' ? '已完成' : scanStatus.status || '空闲' }}</strong>
+            <strong>{{ scanStatusDetail }}</strong>
             <small>已发现 {{ scanStatus.totalSeen ?? 0 }}，已移除 {{ scanStatus.totalRemoved ?? 0 }}</small>
           </div>
 
@@ -790,8 +1091,8 @@ onBeforeUnmount(() => {
                     </button>
                   </div>
                   <div v-if="visibleTags(item).length" class="tag-row">
-                    <span v-for="tag in visibleTags(item)" :key="tag.tag" :class="{ derived: tag.derived }">
-                      {{ tag.tag }}
+                    <span v-for="tag in visibleTags(item)" :key="tag.tag" :class="{ derived: tag.derived }" :title="tag.tag">
+                      {{ tagDisplayName(tag) }}
                     </span>
                   </div>
                 </article>
@@ -830,8 +1131,8 @@ onBeforeUnmount(() => {
               <div><dt>时间</dt><dd>{{ formatDateTime(previewItem.capturedAt || previewItem.modifiedAt) }}</dd></div>
             </dl>
             <div v-if="visibleTags(previewItem).length" class="preview-tags">
-              <span v-for="tag in visibleTags(previewItem)" :key="tag.tag" :class="{ derived: tag.derived }">
-                {{ tag.tag }}
+              <span v-for="tag in visibleTags(previewItem)" :key="tag.tag" :class="{ derived: tag.derived }" :title="tag.tag">
+                {{ tagDisplayName(tag) }}
               </span>
             </div>
             <div class="preview-actions">

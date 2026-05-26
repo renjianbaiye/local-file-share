@@ -36,6 +36,18 @@ int main() {
     assert(!token_help_requested);
     assert(token_parsed.auth_token == "abc123");
 
+    Options onnx_parsed;
+    bool onnx_help_requested = false;
+    wchar_t* onnx_argv[] = {
+        mutable_arg(L"LocalFileShare.exe"),
+        mutable_arg(L"--album-cv-onnx"),
+        mutable_arg(L"D:\\models\\dinov2_album_tagger_v3.onnx")
+    };
+
+    assert(parse_options(3, onnx_argv, onnx_parsed, onnx_help_requested));
+    assert(!onnx_help_requested);
+    assert(onnx_parsed.album_cv_onnx == L"D:\\models\\dinov2_album_tagger_v3.onnx");
+
     std::filesystem::path temp_root = std::filesystem::temp_directory_path() / L"lfs-app-options-test";
     std::filesystem::remove_all(temp_root);
     SetEnvironmentVariableW(L"LOCALAPPDATA", temp_root.wstring().c_str());
