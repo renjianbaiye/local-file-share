@@ -1,0 +1,178 @@
+[
+  {
+    "id": "similar_001",
+    "title": "海滩日落连拍",
+    "photos": [
+      {
+        "id": "photo_001",
+        "thumbnailUrl": "https://picsum.photos/seed/sim1a/400/300",
+        "fileName": "DSC_0421.jpg",
+        "quality_score": 0.92,
+        "sharpness": 0.95,
+        "exposure": 0.90,
+        "resolution": "4032x3024",
+        "sizeBytes": 4521984,
+        "is_best": true,
+        "similarity": 1.0
+      },
+      {
+        "id": "sim_001_b",
+        "thumbnailUrl": "https://picsum.photos/seed/sim1b/400/300",
+        "fileName": "DSC_0420.jpg",
+        "quality_score": 0.85,
+        "sharpness": 0.82,
+        "exposure": 0.88,
+        "resolution": "4032x3024",
+        "sizeBytes": 4321280,
+        "is_best": false,
+        "similarity": 0.94
+      },
+      {
+        "id": "sim_001_c",
+        "thumbnailUrl": "https://picsum.photos/seed/sim1c/400/300",
+        "fileName": "DSC_0419.jpg",
+        "quality_score": 0.71,
+        "sharpness": 0.65,
+        "exposure": 0.78,
+        "resolution": "4032x3024",
+        "sizeBytes": 4198400,
+        "is_best": false,
+        "similarity": 0.91
+      }
+    ],
+    "recommended_keep": 1,
+    "delete_candidates": 2
+  },
+  {
+    "id": "similar_002",
+    "title": "人像连拍",
+    "photos": [
+      {
+        "id": "photo_008",
+        "thumbnailUrl": "https://picsum.photos/seed/sim2a/400/500",
+        "fileName": "IMG_2200.jpg",
+        "quality_score": 0.91,
+        "sharpness": 0.93,
+        "exposure": 0.89,
+        "resolution": "3024x4032",
+        "sizeBytes": 3234816,
+        "is_best": true,
+        "similarity": 1.0
+      },
+      {
+        "id": "sim_002_b",
+        "thumbnailUrl": "https://picsum.photos/seed/sim2b/400/500",
+        "fileName": "IMG_2199.jpg",
+        "quality_score": 0.83,
+        "sharpness": 0.80,
+        "exposure": 0.86,
+        "resolution": "3024x4032",
+        "sizeBytes": 3145728,
+        "is_best": false,
+        "similarity": 0.96
+      },
+      {
+        "id": "sim_002_c",
+        "thumbnailUrl": "https://picsum.photos/seed/sim2c/400/500",
+        "fileName": "IMG_2198.jpg",
+        "quality_score": 0.78,
+        "sharpness": 0.74,
+        "exposure": 0.82,
+        "resolution": "3024x4032",
+        "sizeBytes": 3098624,
+        "is_best": false,
+        "similarity": 0.93
+      },
+      {
+        "id": "sim_002_d",
+        "thumbnailUrl": "https://picsum.photos/seed/sim2d/400/500",
+        "fileName": "IMG_2197.jpg",
+        "quality_score": 0.69,
+        "sharpness": 0.62,
+        "exposure": 0.76,
+        "resolution": "3024x4032",
+        "sizeBytes": 2987520,
+        "is_best": false,
+        "similarity": 0.89
+      }
+    ],
+    "recommended_keep": 1,
+    "delete_candidates": 3
+  },
+  {
+    "id": "similar_003",
+    "title": "建筑多角度",
+    "photos": [
+      {
+        "id": "photo_003",
+        "thumbnailUrl": "https://picsum.photos/seed/sim3a/400/267",
+        "fileName": "DSC_0445.jpg",
+        "quality_score": 0.95,
+        "sharpness": 0.97,
+        "exposure": 0.93,
+        "resolution": "6000x4000",
+        "sizeBytes": 5123072,
+        "is_best": true,
+        "similarity": 1.0
+      },
+      {
+        "id": "sim_003_b",
+        "thumbnailUrl": "https://picsum.photos/seed/sim3b/400/267",
+        "fileName": "DSC_0444.jpg",
+        "quality_score": 0.88,
+        "sharpness": 0.86,
+        "exposure": 0.90,
+        "resolution": "6000x4000",
+        "sizeBytes": 5012480,
+        "is_best": false,
+        "similarity": 0.92
+      }
+    ],
+    "recommended_keep": 1,
+    "delete_candidates": 1
+  },
+  {
+    "id": "similar_004",
+    "title": "夜景连拍",
+    "photos": [
+      {
+        "id": "photo_005",
+        "thumbnailUrl": "https://picsum.photos/seed/sim4a/400/225",
+        "fileName": "DSC_0510.jpg",
+        "quality_score": 0.97,
+        "sharpness": 0.95,
+        "exposure": 0.92,
+        "resolution": "5472x3648",
+        "sizeBytes": 6291456,
+        "is_best": true,
+        "similarity": 1.0
+      },
+      {
+        "id": "sim_004_b",
+        "thumbnailUrl": "https://picsum.photos/seed/sim4b/400/225",
+        "fileName": "DSC_0509.jpg",
+        "quality_score": 0.82,
+        "sharpness": 0.78,
+        "exposure": 0.85,
+        "resolution": "5472x3648",
+        "sizeBytes": 6144000,
+        "is_best": false,
+        "similarity": 0.95
+      },
+      {
+        "id": "sim_004_c",
+        "thumbnailUrl": "https://picsum.photos/seed/sim4c/400/225",
+        "fileName": "DSC_0508.jpg",
+        "quality_score": 0.68,
+        "sharpness": 0.60,
+        "exposure": 0.72,
+        "resolution": "5472x3648",
+        "sizeBytes": 5898240,
+        "is_best": false,
+        "similarity": 0.90
+      }
+    ],
+    "recommended_keep": 1,
+    "delete_candidates": 2
+  }
+]

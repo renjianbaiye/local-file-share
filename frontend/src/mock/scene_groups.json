@@ -1,0 +1,90 @@
+[
+  {
+    "id": "scene_001",
+    "title": "厦门海滩日落",
+    "cover": "https://picsum.photos/seed/s001/800/600",
+    "thumbnails": [
+      "https://picsum.photos/seed/s001t1/200/200",
+      "https://picsum.photos/seed/s001t2/200/200",
+      "https://picsum.photos/seed/s001t3/200/200"
+    ],
+    "photo_count": 15,
+    "photo_ids": ["photo_001", "photo_003", "photo_005"],
+    "tags": ["sea_or_lake", "beach", "scenery", "travel_or_scenery"],
+    "time_range": "2024-10-16 14:00 ~ 18:30",
+    "cluster_score": 0.94
+  },
+  {
+    "id": "scene_002",
+    "title": "鼓浪屿夜色漫步",
+    "cover": "https://picsum.photos/seed/s002/800/600",
+    "thumbnails": [
+      "https://picsum.photos/seed/s002t1/200/200",
+      "https://picsum.photos/seed/s002t2/200/200"
+    ],
+    "photo_count": 8,
+    "photo_ids": ["photo_005", "photo_006"],
+    "tags": ["night", "city_view", "street", "building"],
+    "time_range": "2024-10-16 19:00 ~ 22:00",
+    "cluster_score": 0.89
+  },
+  {
+    "id": "scene_003",
+    "title": "灵隐寺秋色",
+    "cover": "https://picsum.photos/seed/s003/800/600",
+    "thumbnails": [
+      "https://picsum.photos/seed/s003t1/200/200",
+      "https://picsum.photos/seed/s003t2/200/200",
+      "https://picsum.photos/seed/s003t3/200/200"
+    ],
+    "photo_count": 22,
+    "photo_ids": ["photo_012", "photo_013"],
+    "tags": ["temple_or_historic", "architecture", "nature", "travel_checkin"],
+    "time_range": "2024-11-15 09:00 ~ 15:00",
+    "cluster_score": 0.92
+  },
+  {
+    "id": "scene_004",
+    "title": "秋日公园散步",
+    "cover": "https://picsum.photos/seed/s004/800/600",
+    "thumbnails": [
+      "https://picsum.photos/seed/s004t1/200/200",
+      "https://picsum.photos/seed/s004t2/200/200"
+    ],
+    "photo_count": 10,
+    "photo_ids": ["photo_007", "photo_008"],
+    "tags": ["park", "nature", "portrait", "scenery"],
+    "time_range": "2024-10-31 10:00 ~ 12:30",
+    "cluster_score": 0.87
+  },
+  {
+    "id": "scene_005",
+    "title": "美食探店合集",
+    "cover": "https://picsum.photos/seed/s005/800/600",
+    "thumbnails": [
+      "https://picsum.photos/seed/s005t1/200/200",
+      "https://picsum.photos/seed/s005t2/200/200",
+      "https://picsum.photos/seed/s005t3/200/200"
+    ],
+    "photo_count": 18,
+    "photo_ids": ["photo_004", "photo_010"],
+    "tags": ["food", "restaurant", "indoor"],
+    "time_range": "2024-10 ~ 2024-12",
+    "cluster_score": 0.85
+  },
+  {
+    "id": "scene_006",
+    "title": "西湖山水画卷",
+    "cover": "https://picsum.photos/seed/s006/800/600",
+    "thumbnails": [
+      "https://picsum.photos/seed/s006t1/200/200",
+      "https://picsum.photos/seed/s006t2/200/200",
+      "https://picsum.photos/seed/s006t3/200/200"
+    ],
+    "photo_count": 25,
+    "photo_ids": ["photo_011", "photo_015", "photo_023"],
+    "tags": ["sea_or_lake", "mountain", "scenery", "travel_or_scenery"],
+    "time_range": "2024-11-15 ~ 2024-11-17",
+    "cluster_score": 0.96
+  }
+]

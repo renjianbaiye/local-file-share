@@ -1,0 +1,489 @@
+[
+  {
+    "id": "photo_001",
+    "fileName": "DSC_0421.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p001/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p001/1920/1440",
+    "sizeBytes": 4521984,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1729036800,
+    "modifiedAt": 1729036800,
+    "isFavorite": true,
+    "qualityScore": 0.92,
+    "tags": [
+      {"tag": "sea_or_lake", "predicted": true, "probability": 0.95},
+      {"tag": "scenery", "predicted": true, "probability": 0.88},
+      {"tag": "beach", "predicted": true, "probability": 0.82},
+      {"tag": "travel_or_scenery", "derived": true, "probability": 0.9}
+    ]
+  },
+  {
+    "id": "photo_002",
+    "fileName": "IMG_2031.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p002/400/600",
+    "downloadUrl": "https://picsum.photos/seed/p002/1440/2160",
+    "sizeBytes": 3845120,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1729040400,
+    "modifiedAt": 1729040400,
+    "isFavorite": false,
+    "qualityScore": 0.87,
+    "tags": [
+      {"tag": "portrait", "predicted": true, "probability": 0.93},
+      {"tag": "person", "predicted": true, "probability": 0.97},
+      {"tag": "people_photo", "derived": true, "probability": 0.95},
+      {"tag": "travel_checkin", "derived": true, "probability": 0.78}
+    ]
+  },
+  {
+    "id": "photo_003",
+    "fileName": "DSC_0445.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p003/400/267",
+    "downloadUrl": "https://picsum.photos/seed/p003/1920/1280",
+    "sizeBytes": 5123072,
+    "width": 6000,
+    "height": 4000,
+    "capturedAt": 1729044000,
+    "modifiedAt": 1729044000,
+    "isFavorite": true,
+    "qualityScore": 0.95,
+    "tags": [
+      {"tag": "building", "predicted": true, "probability": 0.91},
+      {"tag": "architecture", "predicted": true, "probability": 0.85},
+      {"tag": "city_view", "predicted": true, "probability": 0.79},
+      {"tag": "landmark", "predicted": true, "probability": 0.76}
+    ]
+  },
+  {
+    "id": "photo_004",
+    "fileName": "IMG_2055.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p004/400/400",
+    "downloadUrl": "https://picsum.photos/seed/p004/2048/2048",
+    "sizeBytes": 2987520,
+    "width": 2048,
+    "height": 2048,
+    "capturedAt": 1729047600,
+    "modifiedAt": 1729047600,
+    "isFavorite": false,
+    "qualityScore": 0.83,
+    "tags": [
+      {"tag": "food", "predicted": true, "probability": 0.96},
+      {"tag": "restaurant", "predicted": true, "probability": 0.72},
+      {"tag": "indoor", "predicted": true, "probability": 0.68}
+    ]
+  },
+  {
+    "id": "photo_005",
+    "fileName": "DSC_0510.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p005/400/225",
+    "downloadUrl": "https://picsum.photos/seed/p005/1920/1080",
+    "sizeBytes": 6291456,
+    "width": 5472,
+    "height": 3648,
+    "capturedAt": 1729108800,
+    "modifiedAt": 1729108800,
+    "isFavorite": true,
+    "qualityScore": 0.97,
+    "tags": [
+      {"tag": "night", "predicted": true, "probability": 0.94},
+      {"tag": "city_view", "predicted": true, "probability": 0.89},
+      {"tag": "building", "predicted": true, "probability": 0.82},
+      {"tag": "scenery", "predicted": true, "probability": 0.75}
+    ]
+  },
+  {
+    "id": "photo_006",
+    "fileName": "IMG_2102.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p006/400/533",
+    "downloadUrl": "https://picsum.photos/seed/p006/1536/2048",
+    "sizeBytes": 3456000,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1729112400,
+    "modifiedAt": 1729112400,
+    "isFavorite": false,
+    "qualityScore": 0.79,
+    "tags": [
+      {"tag": "street", "predicted": true, "probability": 0.88},
+      {"tag": "city_view", "predicted": true, "probability": 0.74},
+      {"tag": "night", "predicted": true, "probability": 0.71}
+    ]
+  },
+  {
+    "id": "photo_007",
+    "fileName": "DSC_0602.jpg",
+    "folderPath": "日常/2024秋",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p007/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p007/1920/1440",
+    "sizeBytes": 4012032,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1730332800,
+    "modifiedAt": 1730332800,
+    "isFavorite": false,
+    "qualityScore": 0.88,
+    "tags": [
+      {"tag": "park", "predicted": true, "probability": 0.92},
+      {"tag": "nature", "predicted": true, "probability": 0.87},
+      {"tag": "forest", "predicted": true, "probability": 0.73},
+      {"tag": "scenery", "predicted": true, "probability": 0.81}
+    ]
+  },
+  {
+    "id": "photo_008",
+    "fileName": "IMG_2200.jpg",
+    "folderPath": "日常/2024秋",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p008/400/500",
+    "downloadUrl": "https://picsum.photos/seed/p008/1600/2000",
+    "sizeBytes": 3234816,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1730419200,
+    "modifiedAt": 1730419200,
+    "isFavorite": true,
+    "qualityScore": 0.91,
+    "tags": [
+      {"tag": "portrait", "predicted": true, "probability": 0.95},
+      {"tag": "person", "predicted": true, "probability": 0.98},
+      {"tag": "people_photo", "derived": true, "probability": 0.96},
+      {"tag": "park", "predicted": true, "probability": 0.65}
+    ]
+  },
+  {
+    "id": "photo_009",
+    "fileName": "DSC_0680.jpg",
+    "folderPath": "日常/2024秋",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p009/400/267",
+    "downloadUrl": "https://picsum.photos/seed/p009/1920/1280",
+    "sizeBytes": 5567488,
+    "width": 6000,
+    "height": 4000,
+    "capturedAt": 1730505600,
+    "modifiedAt": 1730505600,
+    "isFavorite": false,
+    "qualityScore": 0.85,
+    "tags": [
+      {"tag": "pet", "predicted": true, "probability": 0.94},
+      {"tag": "indoor", "predicted": true, "probability": 0.78}
+    ]
+  },
+  {
+    "id": "photo_010",
+    "fileName": "IMG_2250.jpg",
+    "folderPath": "日常/2024秋",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p010/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p010/1920/1440",
+    "sizeBytes": 2876416,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1730592000,
+    "modifiedAt": 1730592000,
+    "isFavorite": false,
+    "qualityScore": 0.76,
+    "tags": [
+      {"tag": "food", "predicted": true, "probability": 0.91},
+      {"tag": "indoor", "predicted": true, "probability": 0.82}
+    ]
+  },
+  {
+    "id": "photo_011",
+    "fileName": "DSC_0720.jpg",
+    "folderPath": "旅行/杭州2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p011/400/267",
+    "downloadUrl": "https://picsum.photos/seed/p011/1920/1280",
+    "sizeBytes": 7340032,
+    "width": 6000,
+    "height": 4000,
+    "capturedAt": 1731628800,
+    "modifiedAt": 1731628800,
+    "isFavorite": true,
+    "qualityScore": 0.96,
+    "tags": [
+      {"tag": "sea_or_lake", "predicted": true, "probability": 0.97},
+      {"tag": "scenery", "predicted": true, "probability": 0.94},
+      {"tag": "mountain", "predicted": true, "probability": 0.68},
+      {"tag": "travel_or_scenery", "derived": true, "probability": 0.95}
+    ]
+  },
+  {
+    "id": "photo_012",
+    "fileName": "IMG_2340.jpg",
+    "folderPath": "旅行/杭州2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p012/400/533",
+    "downloadUrl": "https://picsum.photos/seed/p012/1536/2048",
+    "sizeBytes": 3678208,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1731632400,
+    "modifiedAt": 1731632400,
+    "isFavorite": false,
+    "qualityScore": 0.89,
+    "tags": [
+      {"tag": "temple_or_historic", "predicted": true, "probability": 0.91},
+      {"tag": "building", "predicted": true, "probability": 0.85},
+      {"tag": "architecture", "predicted": true, "probability": 0.80}
+    ]
+  },
+  {
+    "id": "photo_013",
+    "fileName": "DSC_0755.jpg",
+    "folderPath": "旅行/杭州2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p013/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p013/1920/1440",
+    "sizeBytes": 4890624,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1731715200,
+    "modifiedAt": 1731715200,
+    "isFavorite": false,
+    "qualityScore": 0.90,
+    "tags": [
+      {"tag": "portrait", "predicted": true, "probability": 0.88},
+      {"tag": "person", "predicted": true, "probability": 0.95},
+      {"tag": "people_photo", "derived": true, "probability": 0.91},
+      {"tag": "travel_checkin", "derived": true, "probability": 0.83}
+    ]
+  },
+  {
+    "id": "photo_014",
+    "fileName": "IMG_2380.jpg",
+    "folderPath": "旅行/杭州2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p014/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p014/1920/1440",
+    "sizeBytes": 3145728,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1731718800,
+    "modifiedAt": 1731718800,
+    "isFavorite": false,
+    "qualityScore": 0.82,
+    "tags": [
+      {"tag": "group_people", "predicted": true, "probability": 0.90},
+      {"tag": "person", "predicted": true, "probability": 0.96},
+      {"tag": "portrait", "predicted": true, "probability": 0.84}
+    ]
+  },
+  {
+    "id": "photo_015",
+    "fileName": "DSC_0801.jpg",
+    "folderPath": "旅行/杭州2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p015/400/267",
+    "downloadUrl": "https://picsum.photos/seed/p015/1920/1280",
+    "sizeBytes": 5898240,
+    "width": 5472,
+    "height": 3648,
+    "capturedAt": 1731801600,
+    "modifiedAt": 1731801600,
+    "isFavorite": true,
+    "qualityScore": 0.94,
+    "tags": [
+      {"tag": "mountain", "predicted": true, "probability": 0.93},
+      {"tag": "scenery", "predicted": true, "probability": 0.91},
+      {"tag": "nature", "predicted": true, "probability": 0.86},
+      {"tag": "travel_or_scenery", "derived": true, "probability": 0.92}
+    ]
+  },
+  {
+    "id": "photo_016",
+    "fileName": "IMG_2410.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p016/400/400",
+    "downloadUrl": "https://picsum.photos/seed/p016/2048/2048",
+    "sizeBytes": 2345984,
+    "width": 2048,
+    "height": 2048,
+    "capturedAt": 1733529600,
+    "modifiedAt": 1733529600,
+    "isFavorite": false,
+    "qualityScore": 0.74,
+    "tags": [
+      {"tag": "screenshot", "predicted": true, "probability": 0.97},
+      {"tag": "document_or_screen", "derived": true, "probability": 0.95}
+    ]
+  },
+  {
+    "id": "photo_017",
+    "fileName": "DSC_0890.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p017/400/600",
+    "downloadUrl": "https://picsum.photos/seed/p017/1440/2160",
+    "sizeBytes": 4567040,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1733616000,
+    "modifiedAt": 1733616000,
+    "isFavorite": false,
+    "qualityScore": 0.86,
+    "tags": [
+      {"tag": "street", "predicted": true, "probability": 0.85},
+      {"tag": "city_view", "predicted": true, "probability": 0.78},
+      {"tag": "building", "predicted": true, "probability": 0.72}
+    ]
+  },
+  {
+    "id": "photo_018",
+    "fileName": "IMG_2500.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p018/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p018/1920/1440",
+    "sizeBytes": 3901440,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1733702400,
+    "modifiedAt": 1733702400,
+    "isFavorite": true,
+    "qualityScore": 0.93,
+    "tags": [
+      {"tag": "portrait", "predicted": true, "probability": 0.96},
+      {"tag": "person", "predicted": true, "probability": 0.98},
+      {"tag": "people_photo", "derived": true, "probability": 0.97},
+      {"tag": "indoor", "predicted": true, "probability": 0.65}
+    ]
+  },
+  {
+    "id": "photo_019",
+    "fileName": "DSC_0920.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p019/400/267",
+    "downloadUrl": "https://picsum.photos/seed/p019/1920/1280",
+    "sizeBytes": 6553600,
+    "width": 6000,
+    "height": 4000,
+    "capturedAt": 1734220800,
+    "modifiedAt": 1734220800,
+    "isFavorite": false,
+    "qualityScore": 0.91,
+    "tags": [
+      {"tag": "river_or_water", "predicted": true, "probability": 0.89},
+      {"tag": "scenery", "predicted": true, "probability": 0.85},
+      {"tag": "park", "predicted": true, "probability": 0.70}
+    ]
+  },
+  {
+    "id": "photo_020",
+    "fileName": "IMG_2550.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p020/400/533",
+    "downloadUrl": "https://picsum.photos/seed/p020/1536/2048",
+    "sizeBytes": 2678784,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1734307200,
+    "modifiedAt": 1734307200,
+    "isFavorite": false,
+    "qualityScore": 0.80,
+    "tags": [
+      {"tag": "museum", "predicted": true, "probability": 0.88},
+      {"tag": "indoor", "predicted": true, "probability": 0.92},
+      {"tag": "architecture", "predicted": true, "probability": 0.67}
+    ]
+  },
+  {
+    "id": "photo_021",
+    "fileName": "DSC_1001.jpg",
+    "folderPath": "旅行/厦门2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p021/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p021/1920/1440",
+    "sizeBytes": 4234240,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1729051200,
+    "modifiedAt": 1729051200,
+    "isFavorite": false,
+    "qualityScore": 0.84,
+    "tags": [
+      {"tag": "vehicle_or_transport", "predicted": true, "probability": 0.82},
+      {"tag": "street", "predicted": true, "probability": 0.76},
+      {"tag": "city_view", "predicted": true, "probability": 0.69}
+    ]
+  },
+  {
+    "id": "photo_022",
+    "fileName": "IMG_2600.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p022/400/300",
+    "downloadUrl": "https://picsum.photos/seed/p022/1920/1440",
+    "sizeBytes": 3012608,
+    "width": 4032,
+    "height": 3024,
+    "capturedAt": 1734393600,
+    "modifiedAt": 1734393600,
+    "isFavorite": false,
+    "qualityScore": 0.77,
+    "tags": [
+      {"tag": "pet", "predicted": true, "probability": 0.96},
+      {"tag": "indoor", "predicted": true, "probability": 0.80}
+    ]
+  },
+  {
+    "id": "photo_023",
+    "fileName": "DSC_1050.jpg",
+    "folderPath": "旅行/杭州2024",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p023/400/267",
+    "downloadUrl": "https://picsum.photos/seed/p023/1920/1280",
+    "sizeBytes": 5345280,
+    "width": 5472,
+    "height": 3648,
+    "capturedAt": 1731805200,
+    "modifiedAt": 1731805200,
+    "isFavorite": true,
+    "qualityScore": 0.93,
+    "tags": [
+      {"tag": "sea_or_lake", "predicted": true, "probability": 0.92},
+      {"tag": "mountain", "predicted": true, "probability": 0.78},
+      {"tag": "scenery", "predicted": true, "probability": 0.90}
+    ]
+  },
+  {
+    "id": "photo_024",
+    "fileName": "IMG_2650.jpg",
+    "folderPath": "日常/2024冬",
+    "mediaType": "image",
+    "thumbnailUrl": "https://picsum.photos/seed/p024/400/533",
+    "downloadUrl": "https://picsum.photos/seed/p024/1536/2048",
+    "sizeBytes": 4012032,
+    "width": 3024,
+    "height": 4032,
+    "capturedAt": 1734480000,
+    "modifiedAt": 1734480000,
+    "isFavorite": false,
+    "qualityScore": 0.88,
+    "tags": [
+      {"tag": "portrait", "predicted": true, "probability": 0.94},
+      {"tag": "person", "predicted": true, "probability": 0.97},
+      {"tag": "people_photo", "derived": true, "probability": 0.95},
+      {"tag": "night", "predicted": true, "probability": 0.62}
+    ]
+  }
+]

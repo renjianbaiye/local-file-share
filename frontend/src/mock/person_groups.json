@@ -1,0 +1,52 @@
+[
+  {
+    "id": "person_001",
+    "name": "小明",
+    "avatar": "https://picsum.photos/seed/face1/200/200",
+    "photo_count": 42,
+    "photo_ids": ["photo_002", "photo_008", "photo_013", "photo_018", "photo_024"],
+    "common_tags": ["portrait", "travel_checkin", "people_photo"],
+    "first_seen": 1729036800,
+    "last_seen": 1734480000
+  },
+  {
+    "id": "person_002",
+    "name": "小红",
+    "avatar": "https://picsum.photos/seed/face2/200/200",
+    "photo_count": 28,
+    "photo_ids": ["photo_002", "photo_013", "photo_014"],
+    "common_tags": ["portrait", "group_people", "travel_checkin"],
+    "first_seen": 1729040400,
+    "last_seen": 1733702400
+  },
+  {
+    "id": "person_003",
+    "name": null,
+    "avatar": "https://picsum.photos/seed/face3/200/200",
+    "photo_count": 15,
+    "photo_ids": ["photo_014", "photo_024"],
+    "common_tags": ["group_people", "indoor"],
+    "first_seen": 1731718800,
+    "last_seen": 1734480000
+  },
+  {
+    "id": "person_004",
+    "name": "阿杰",
+    "avatar": "https://picsum.photos/seed/face4/200/200",
+    "photo_count": 35,
+    "photo_ids": ["photo_008", "photo_013", "photo_018"],
+    "common_tags": ["portrait", "travel_checkin", "park"],
+    "first_seen": 1730419200,
+    "last_seen": 1734307200
+  },
+  {
+    "id": "person_005",
+    "name": null,
+    "avatar": "https://picsum.photos/seed/face5/200/200",
+    "photo_count": 8,
+    "photo_ids": ["photo_014"],
+    "common_tags": ["group_people"],
+    "first_seen": 1731718800,
+    "last_seen": 1731718800
+  }
+]
