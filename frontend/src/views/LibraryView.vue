@@ -6,14 +6,13 @@ import TopToolbar from '../components/TopToolbar.vue'
 import PhotoMasonry from '../components/PhotoMasonry.vue'
 import TimelineSection from '../components/TimelineSection.vue'
 import PhotoPreviewModal from '../components/PhotoPreviewModal.vue'
-import PhotoRiver from '../components/effects/PhotoRiver.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LoadingSkeleton from '../components/LoadingSkeleton.vue'
 import { Trash2, CheckSquare } from '@lucide/vue'
 
-const { 
+const {
   photos, photosByDate, favoritePhotos, load, loaded,
-  isSelectMode, selectedIds 
+  isSelectMode, selectedIds, toggleSelection,
 } = usePhotos()
 
 const currentView = ref('masonry')
@@ -22,10 +21,6 @@ const searchQuery = ref('')
 const toolbarRef = ref(null)
 
 onMounted(() => load())
-
-const riverPhotos = computed(() => {
-  return favoritePhotos.value.slice(0, 12).map(p => p.thumbnailUrl)
-})
 
 const filteredPhotos = computed(() => {
   if (!searchQuery.value) return photos.value
@@ -45,7 +40,7 @@ const filteredByDate = computed(() => {
       items: g.items.filter(p =>
         p.fileName?.toLowerCase().includes(q) ||
         p.tags?.some(t => t.tag.includes(q))
-      )
+      ),
     }))
     .filter(g => g.items.length > 0)
 })
@@ -55,8 +50,7 @@ const openPreview = (photo) => { previewItem.value = photo }
 const closePreview = () => { previewItem.value = null }
 
 const deleteSelected = async () => {
-  console.log('Deleting selected IDs:', Array.from(selectedIds.value))
-  alert(`删除了 ${selectedIds.value.size} 张照片`)
+  alert(`已选择 ${selectedIds.value.size} 张照片`)
   isSelectMode.value = false
 }
 
@@ -68,66 +62,66 @@ useKeyboard({
 
 <template>
   <div class="view-page library-view">
-    <TopToolbar
-      ref="toolbarRef"
-      :currentView="currentView"
-      @viewChange="currentView = $event"
-      @search="onSearch"
-    />
-
-    <LoadingSkeleton v-if="!loaded" />
-
-    <template v-else-if="photos.length === 0">
-      <EmptyState
-        title="还没有照片"
-        description="请先通过文件传输上传照片，或启动后端扫描索引。"
-      />
-    </template>
-
-    <template v-else>
-      <!-- Featured Memories River -->
-      <section v-if="riverPhotos.length >= 3 && !searchQuery" class="memories-card">
-        <div class="memories-header">
-          <h2>精选回忆</h2>
-          <span>{{ favoritePhotos.length }} 张收藏</span>
+    <div class="library-chrome">
+      <header class="library-header">
+        <div>
+          <h1>图库</h1>
+          <p>
+            今天整理 {{ photos.length.toLocaleString() }} 张照片
+            <span v-if="favoritePhotos.length"> · {{ favoritePhotos.length }} 张收藏</span>
+          </p>
         </div>
-        <PhotoRiver :photos="riverPhotos" :height="180" :speed="25" direction="left" />
-      </section>
 
-      <!-- Timeline View -->
-      <template v-if="currentView === 'timeline'">
-        <TimelineSection
-          v-for="group in filteredByDate"
-          :key="group.date"
-          :date="group.date"
-          :photos="group.items"
-          @preview="openPreview"
+        <TopToolbar
+          ref="toolbarRef"
+          :currentView="currentView"
+          @viewChange="currentView = $event"
+          @search="onSearch"
+        />
+      </header>
+
+      <LoadingSkeleton v-if="!loaded" />
+
+      <template v-else-if="photos.length === 0">
+        <EmptyState
+          title="还没有照片"
+          description="通过文件传输上传照片，或启动后端扫描索引后，这里会显示你的图库。"
         />
       </template>
 
-      <!-- Masonry View -->
-      <template v-else-if="currentView === 'masonry'">
-        <PhotoMasonry :photos="filteredPhotos" @preview="openPreview" />
-      </template>
-
-      <!-- Grid View -->
       <template v-else>
-        <div class="photo-grid-view">
-          <div
-            v-for="photo in filteredPhotos"
-            :key="photo.id"
-            class="grid-cell"
-            :class="{ 'is-selected': selectedIds.has(photo.id) }"
-            @click="isSelectMode ? toggleSelection(photo.id) : openPreview(photo)"
-          >
-            <img :src="photo.thumbnailUrl" :alt="photo.fileName" loading="lazy" />
-            <div v-if="isSelectMode" class="select-indicator" :class="{ selected: selectedIds.has(photo.id) }">
-              <CheckSquare v-if="selectedIds.has(photo.id)" :size="14" />
+        <template v-if="currentView === 'timeline'">
+          <TimelineSection
+            v-for="group in filteredByDate"
+            :key="group.date"
+            :date="group.date"
+            :photos="group.items"
+            @preview="openPreview"
+          />
+        </template>
+
+        <template v-else-if="currentView === 'masonry'">
+          <PhotoMasonry :photos="filteredPhotos" @preview="openPreview" />
+        </template>
+
+        <template v-else>
+          <div class="photo-grid-view">
+            <div
+              v-for="photo in filteredPhotos"
+              :key="photo.id"
+              class="grid-cell"
+              :class="{ 'is-selected': selectedIds.has(photo.id) }"
+              @click="isSelectMode ? toggleSelection(photo.id) : openPreview(photo)"
+            >
+              <img :src="photo.thumbnailUrl" :alt="photo.fileName" loading="lazy" />
+              <div v-if="isSelectMode" class="select-indicator" :class="{ selected: selectedIds.has(photo.id) }">
+                <CheckSquare v-if="selectedIds.has(photo.id)" :size="14" />
+              </div>
             </div>
           </div>
-        </div>
+        </template>
       </template>
-    </template>
+    </div>
 
     <PhotoPreviewModal
       :item="previewItem"
@@ -136,7 +130,6 @@ useKeyboard({
       @navigate="previewItem = $event"
     />
 
-    <!-- Bottom Action Bar for Batch Selection -->
     <Transition name="slide-up">
       <div v-if="isSelectMode" class="bottom-action-bar">
         <div class="selection-info">

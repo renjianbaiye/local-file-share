@@ -250,6 +250,33 @@ std::vector<PhotoTag> derive_tags_from_probabilities(
     return tags;
 }
 
+std::string tag_probs_json(const std::vector<std::string>& labels, const std::vector<float>& probabilities) {
+    std::ostringstream out;
+    out << "{";
+    for (size_t i = 0; i < labels.size() && i < probabilities.size(); ++i) {
+        if (i != 0) {
+            out << ",";
+        }
+        out << "\"" << labels[i] << "\":" << probabilities[i];
+    }
+    out << "}";
+    return out.str();
+}
+
+void validate_embedding(const std::vector<float>& embedding, size_t expected_dim) {
+    if (embedding.size() != expected_dim) {
+        throw std::runtime_error("ONNX embedding output has unexpected dimension");
+    }
+    double norm = 0.0;
+    for (float value : embedding) {
+        norm += static_cast<double>(value) * value;
+    }
+    norm = std::sqrt(norm);
+    if (std::abs(norm - 1.0) > 0.05) {
+        throw std::runtime_error("ONNX embedding output is not L2 normalized");
+    }
+}
+
 std::vector<PhotoTag> parse_label_results(const std::string& json) {
     std::vector<PhotoTag> tags;
     std::regex label_regex(
@@ -386,6 +413,10 @@ public:
     }
 
     std::vector<PhotoTag> predict(const std::wstring& image_path) const override {
+        return analyze(image_path).tags;
+    }
+
+    PhotoTaggerResult analyze(const std::wstring& image_path) const override {
         std::vector<float> input = load_image_tensor(image_path);
         std::array<int64_t, 4> input_shape = {1, 3, kInputSize, kInputSize};
         Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(
@@ -399,14 +430,14 @@ public:
             input_shape.size());
 
         const char* input_names[] = {"input"};
-        const char* output_names[] = {"logits"};
+        const char* output_names[] = {"logits", "embedding"};
         auto outputs = session_->Run(
             Ort::RunOptions{nullptr},
             input_names,
             &input_tensor,
             1,
             output_names,
-            1);
+            2);
 
         float* logits = outputs[0].GetTensorMutableData<float>();
         size_t count = metadata_.labels.size();
@@ -415,7 +446,23 @@ public:
             probabilities[i] = 1.0f / (1.0f + std::exp(-logits[i]));
         }
 
-        return derive_tags_from_probabilities(metadata_.labels, metadata_.thresholds, probabilities);
+        auto embedding_info = outputs[1].GetTensorTypeAndShapeInfo();
+        std::vector<int64_t> embedding_shape = embedding_info.GetShape();
+        if (embedding_shape.size() != 2 || embedding_shape[0] != 1) {
+            throw std::runtime_error("ONNX embedding output must have shape [1, embedding_dim]");
+        }
+        size_t embedding_dim = static_cast<size_t>(embedding_shape[1]);
+        float* embedding_data = outputs[1].GetTensorMutableData<float>();
+        std::vector<float> embedding(embedding_data, embedding_data + embedding_dim);
+        validate_embedding(embedding, 1024);
+
+        PhotoTaggerResult result;
+        result.tags = derive_tags_from_probabilities(metadata_.labels, metadata_.thresholds, probabilities);
+        result.embedding = std::move(embedding);
+        result.embedding_dim = 1024;
+        result.tag_probs_json = tag_probs_json(metadata_.labels, probabilities);
+        result.model_version = "dinov2_album_tagger_v3";
+        return result;
     }
 
 private:
@@ -431,6 +478,12 @@ private:
 
 bool NullPhotoTagger::available() const {
     return false;
+}
+
+PhotoTaggerResult PhotoTagger::analyze(const std::wstring& image_path) const {
+    PhotoTaggerResult result;
+    result.tags = predict(image_path);
+    return result;
 }
 
 std::vector<PhotoTag> NullPhotoTagger::predict(const std::wstring&) const {
@@ -563,11 +616,7 @@ std::unique_ptr<PhotoTagger> create_photo_tagger(
     (void)onnx_options;
 #endif
 
-    std::unique_ptr<PhotoTagger> tagger(new PythonPhotoTagger(python_options));
-    if (tagger->available()) {
-        std::cerr << "Album CV tagger backend: Python subprocess\n";
-        return tagger;
-    }
+    (void)python_options;
 
     return std::unique_ptr<PhotoTagger>(new NullPhotoTagger());
 }

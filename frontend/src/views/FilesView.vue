@@ -4,6 +4,7 @@ import {
   ChevronRight, Copy, Upload, RefreshCw, Search,
   Folder, FileArchive, FileImage, FileText, ArrowDownToLine, QrCode,
 } from '@lucide/vue'
+import { usePhotos } from '../composables/usePhotos.js'
 
 const currentPath = ref('')
 const parentPath = ref(null)
@@ -18,6 +19,7 @@ const debouncedFileQuery = ref('')
 let fileSearchTimer = null
 let uploadRefreshTimer = null
 let uploadRefreshInFlight = false
+const { waitForPhotoScan, refreshPhotos } = usePhotos()
 
 const visibleEntries = computed(() => {
   const keyword = debouncedFileQuery.value.trim().toLowerCase()
@@ -82,7 +84,7 @@ const stopUploadRefresh = () => {
 const uploadFile = async (file) => {
   const formData = new FormData()
   formData.append('file', file)
-  const response = await fetch(`/api/upload?path=${encodeURIComponent(currentPath.value)}`, {
+  const response = await fetch(`/api/upload?path=${encodeURIComponent(currentPath.value)}&scan=0`, {
     method: 'POST', body: formData,
   })
   if (!response.ok) {
@@ -102,6 +104,9 @@ const handleUpload = async (event) => {
       await uploadFile(file)
       await refreshDirectorySnapshot()
     }
+    await fetch('/api/photos/scan', { method: 'POST' })
+    await waitForPhotoScan()
+    await refreshPhotos()
     await loadDirectory(currentPath.value)
   } catch (error) {
     fileError.value = `上传失败: ${error.message}`

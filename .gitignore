@@ -52,6 +52,7 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+.local-vite/
 .npm/
 .yarn/
 *.zip/
@@ -109,3 +110,4 @@ min.out
 
 start-dev.cmd
 project.zip
+.superpowers/

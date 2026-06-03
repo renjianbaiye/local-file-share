@@ -1,5 +1,4 @@
 <script setup>
-import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   Images, Clapperboard, Users, Inbox, FolderUp, Settings, Sun, Moon,
@@ -10,15 +9,15 @@ const router = useRouter()
 const route = useRoute()
 const { theme, toggle } = useTheme()
 
-const mainNav = [
+const libraryNav = [
   { name: '图库', icon: Images, to: '/' },
   { name: '场景', icon: Clapperboard, to: '/scenes' },
   { name: '人物', icon: Users, to: '/people' },
   { name: '待整理', icon: Inbox, to: '/tidy' },
 ]
 
-const toolNav = [
-  { name: '文件传输', icon: FolderUp, to: '/files' },
+const utilityNav = [
+  { name: '传输', icon: FolderUp, to: '/files' },
   { name: '设置', icon: Settings, to: '/settings' },
 ]
 
@@ -31,47 +30,55 @@ const navigate = (path) => router.push(path)
 </script>
 
 <template>
-  <nav class="app-sidebar">
-    <div class="sidebar-brand" @click="navigate('/')">
-      <div class="brand-icon">
+  <aside class="app-sidebar" aria-label="主导航">
+    <button class="sidebar-brand" type="button" title="智能相册" @click="navigate('/')">
+      <span class="brand-mark">
         <Images :size="18" />
-      </div>
-      <span class="brand-text">智能相册</span>
-    </div>
+      </span>
+      <span class="brand-line brand-line-dark"></span>
+      <span class="brand-line"></span>
+      <span class="brand-line short"></span>
+    </button>
 
-    <div class="sidebar-nav-main">
+    <nav class="sidebar-section" aria-label="图库导航">
       <button
-        v-for="item in mainNav"
+        v-for="item in libraryNav"
         :key="item.to"
         class="sidebar-item"
         :class="{ active: isActive(item.to) }"
+        type="button"
+        :title="item.name"
         @click="navigate(item.to)"
       >
-        <component :is="item.icon" :size="18" />
+        <component :is="item.icon" :size="18" :stroke-width="isActive(item.to) ? 2.2 : 1.8" />
         <span>{{ item.name }}</span>
       </button>
-    </div>
+    </nav>
 
-    <div class="sidebar-divider" />
-
-    <div class="sidebar-nav-tools">
+    <nav class="sidebar-section sidebar-section-tools" aria-label="工具导航">
       <button
-        v-for="item in toolNav"
+        v-for="item in utilityNav"
         :key="item.to"
-        class="sidebar-item tool-item"
+        class="sidebar-item"
         :class="{ active: isActive(item.to) }"
+        type="button"
+        :title="item.name"
         @click="navigate(item.to)"
       >
-        <component :is="item.icon" :size="16" />
+        <component :is="item.icon" :size="17" :stroke-width="1.8" />
         <span>{{ item.name }}</span>
       </button>
-    </div>
+    </nav>
 
-    <div class="sidebar-footer">
-      <button class="theme-toggle" @click="toggle" :title="theme === 'dark' ? '切换亮色模式' : '切换暗色模式'">
-        <Sun v-if="theme === 'dark'" :size="16" />
-        <Moon v-else :size="16" />
-      </button>
-    </div>
-  </nav>
+    <button
+      class="theme-toggle"
+      type="button"
+      @click="toggle"
+      :title="theme === 'dark' ? '浅色模式' : '深色模式'"
+    >
+      <Sun v-if="theme === 'dark'" :size="17" />
+      <Moon v-else :size="17" />
+      <span>{{ theme === 'dark' ? '浅色' : '深色' }}</span>
+    </button>
+  </aside>
 </template>

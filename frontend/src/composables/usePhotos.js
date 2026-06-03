@@ -8,6 +8,8 @@ const similarGroups = ref([])
 const deleteCandidates = ref(new Set())
 const keepMarked = ref(new Set())
 const loaded = ref(false)
+const tidyRebuilding = ref(false)
+const tidyError = ref('')
 
 const tagLabels = {
   person: '人物', portrait: '人像', landmark: '地标', scenery: '风景',
@@ -23,8 +25,8 @@ const tagLabels = {
 }
 
 export function usePhotos() {
-  const load = async () => {
-    if (loaded.value) return
+  const load = async (force = false) => {
+    if (loaded.value && !force) return
 
     // Load real photos from backend API
     try {
@@ -59,15 +61,53 @@ export function usePhotos() {
     loaded.value = true
   }
 
+  const waitForPhotoScan = async ({ timeoutMs = 60000, intervalMs = 600 } = {}) => {
+    const started = Date.now()
+    while (Date.now() - started < timeoutMs) {
+      try {
+        const res = await fetch('/api/photos/scan/status')
+        if (res.ok) {
+          const status = await res.json()
+          if (status.status !== 'scanning') return status
+        }
+      } catch { /* keep polling */ }
+      await new Promise(resolve => setTimeout(resolve, intervalMs))
+    }
+    return null
+  }
+
+  const refreshPhotos = async () => {
+    loaded.value = false
+    await load(true)
+  }
+
   const scan = async () => {
     try {
       await fetch('/api/photos/scan', { method: 'POST' })
-      // Clear loaded state and reload
-      loaded.value = false
-      await load()
+      await waitForPhotoScan()
+      await refreshPhotos()
     } catch (e) {
       console.error('Failed to trigger scan:', e)
       alert('扫描失败，请确保后端服务正常运行')
+    }
+  }
+
+  const rebuildTidy = async () => {
+    tidyRebuilding.value = true
+    tidyError.value = ''
+    try {
+      const res = await fetch('/api/photos/tidy/rebuild', { method: 'POST' })
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+      await refreshPhotos()
+      return await res.json().catch(() => null)
+    } catch (e) {
+      tidyError.value = e?.message || 'Failed to rebuild tidy groups'
+      console.error('Failed to rebuild tidy groups:', e)
+      return null
+    } finally {
+      tidyRebuilding.value = false
     }
   }
 
@@ -139,12 +179,13 @@ export function usePhotos() {
 
   return {
     photos, scenes, persons, similarGroups, loaded,
+    tidyRebuilding, tidyError,
     deleteCandidates, keepMarked,
-    load, getTagLabel, formatDay, formatBytes,
+    load, refreshPhotos, waitForPhotoScan, getTagLabel, formatDay, formatBytes,
     photosByDate, favoritePhotos,
     markDeleteCandidate, markKeep, isDeleteCandidate, isKeepMarked,
     totalDeleteCandidates,
     isSelectMode, selectedIds, toggleSelectMode, toggleSelection,
-    scan,
+    scan, rebuildTidy,
   }
 }

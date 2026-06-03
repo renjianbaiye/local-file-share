@@ -6,11 +6,20 @@
 #include <string>
 #include <vector>
 
+struct PhotoTaggerResult {
+    std::vector<PhotoTag> tags;
+    std::vector<float> embedding;
+    int embedding_dim = 0;
+    std::string tag_probs_json;
+    std::string model_version;
+};
+
 class PhotoTagger {
 public:
     virtual ~PhotoTagger() = default;
     virtual bool available() const = 0;
     virtual std::vector<PhotoTag> predict(const std::wstring& image_path) const = 0;
+    virtual PhotoTaggerResult analyze(const std::wstring& image_path) const;
 };
 
 class NullPhotoTagger : public PhotoTagger {

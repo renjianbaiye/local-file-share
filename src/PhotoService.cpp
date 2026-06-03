@@ -1,6 +1,8 @@
 #include "PhotoService.h"
 
 #include "FileManager.h"
+#include "PerceptualHash.h"
+#include "PhotoQualityScorer.h"
 
 #include <algorithm>
 #include <chrono>
@@ -139,15 +141,82 @@ bool PhotoService::shouldTagPhoto(const PhotoRecord& photo) const {
     return true;
 }
 
+bool should_extract_feature(PhotoRepository& repository, const PhotoRecord& photo) {
+    if (photo.media_type != "image") {
+        return false;
+    }
+    try {
+        PhotoRecord stored = repository.getPhotoByRelativePath(photo.relative_path);
+        std::optional<PhotoFeature> feature = repository.getPhotoFeature(stored.id);
+        return !feature.has_value() || feature->image_mtime != photo.modified_at;
+    } catch (...) {
+        return true;
+    }
+}
+
+std::string hash_reasons_json(const std::vector<std::string>& reasons) {
+    std::string json = "[";
+    for (size_t i = 0; i < reasons.size(); ++i) {
+        if (i != 0) json += ",";
+        json += "\"" + reasons[i] + "\"";
+    }
+    json += "]";
+    return json;
+}
+
 void PhotoService::tagPhotoIfAvailable(const PhotoRecord& photo, const std::wstring& file_path, bool force) const {
     if (!force || tagger_ == nullptr || !tagger_->available() || photo.media_type != "image") {
         return;
     }
 
     try {
-        std::vector<PhotoTag> tags = tagger_->predict(file_path);
+        PhotoTaggerResult analysis = tagger_->analyze(file_path);
+        std::vector<PhotoTag> tags = analysis.tags;
         repository_.replacePhotoTags(photo.relative_path, tags);
     } catch (...) {
+    }
+}
+
+bool extractFeatureIfNeeded(
+    PhotoRepository& repository,
+    PhotoTagger* tagger,
+    const PhotoRecord& photo,
+    const std::wstring& file_path,
+    bool force) {
+    if (!force || photo.media_type != "image") {
+        return false;
+    }
+
+    try {
+        PhotoRecord stored = repository.getPhotoByRelativePath(photo.relative_path);
+        PhotoQualityScore quality = PhotoQualityScorer::score(file_path);
+        PhotoFeature feature;
+        feature.photo_id = stored.id;
+        feature.dhash = PerceptualHash::toHex(PerceptualHash::dhash(file_path));
+        feature.phash = feature.dhash;
+        feature.sharpness_score = quality.sharpness_score;
+        feature.exposure_score = quality.exposure_score;
+        feature.resolution_score = quality.resolution_score;
+        feature.contrast_score = quality.contrast_score;
+        feature.noise_score = quality.noise_score;
+        feature.quality_score = quality.quality_score;
+        feature.image_mtime = photo.modified_at;
+        feature.created_at = unix_time_now();
+        feature.updated_at = feature.created_at;
+
+        if (tagger != nullptr && tagger->available()) {
+            PhotoTaggerResult analysis = tagger->analyze(file_path);
+            feature.embedding = std::move(analysis.embedding);
+            feature.embedding_dim = analysis.embedding_dim;
+            feature.tag_probs_json = analysis.tag_probs_json;
+            feature.model_version = analysis.model_version;
+            repository.replacePhotoTags(photo.relative_path, analysis.tags);
+        }
+
+        repository.upsertPhotoFeature(feature);
+        return true;
+    } catch (...) {
+        return false;
     }
 }
 
@@ -169,8 +238,12 @@ ScanStatus PhotoService::scanOnce(ScanStatus current) {
             PhotoRecord photo = buildRecord(entry.path().wstring(), indexed_at);
             seen.insert(photo.relative_path);
             bool needs_tagging = shouldTagPhoto(photo);
+            bool needs_feature = should_extract_feature(repository_, photo);
             repository_.upsertPhoto(photo);
-            tagPhotoIfAvailable(photo, entry.path().wstring(), needs_tagging);
+            bool feature_extracted = extractFeatureIfNeeded(repository_, tagger_, photo, entry.path().wstring(), needs_feature);
+            if (!feature_extracted) {
+                tagPhotoIfAvailable(photo, entry.path().wstring(), needs_tagging);
+            }
             ++current.total_seen;
             ++current.total_indexed;
             if (current.total_seen % 5 == 0) {

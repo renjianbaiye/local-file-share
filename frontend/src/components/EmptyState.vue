@@ -11,7 +11,7 @@ defineProps({
 <template>
   <div class="empty-state">
     <div class="empty-icon">
-      <component :is="icon" :size="40" />
+      <component :is="icon" :size="28" :stroke-width="1.6" />
     </div>
     <strong>{{ title }}</strong>
     <p v-if="description">{{ description }}</p>

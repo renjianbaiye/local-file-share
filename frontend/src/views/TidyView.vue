@@ -6,7 +6,7 @@ import PhotoStackCard from '../components/PhotoStackCard.vue'
 import SelectionModePanel from '../components/SelectionModePanel.vue'
 import EmptyState from '../components/EmptyState.vue'
 
-const { similarGroups, load, loaded, totalDeleteCandidates } = usePhotos()
+const { similarGroups, load, loaded, totalDeleteCandidates, tidyRebuilding, tidyError } = usePhotos()
 const expandedGroup = ref(null)
 
 onMounted(() => load())

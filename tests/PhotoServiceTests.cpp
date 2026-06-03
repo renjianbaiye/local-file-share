@@ -18,6 +18,45 @@ static void write_file(const fs::path& path, const char* content) {
     out << content;
 }
 
+static void remove_with_retry(const fs::path& path) {
+    for (int i = 0; i < 20; ++i) {
+        std::error_code ec;
+        fs::remove(path, ec);
+        if (!fs::exists(path)) {
+            return;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+}
+
+static void write_bmp(const fs::path& path, int width, int height) {
+    fs::create_directories(path.parent_path());
+    int row_stride = ((width * 3 + 3) / 4) * 4;
+    int pixel_bytes = row_stride * height;
+    int file_size = 54 + pixel_bytes;
+    std::vector<unsigned char> data(static_cast<size_t>(file_size), 0);
+    data[0] = 'B';
+    data[1] = 'M';
+    *reinterpret_cast<int32_t*>(&data[2]) = file_size;
+    *reinterpret_cast<int32_t*>(&data[10]) = 54;
+    *reinterpret_cast<int32_t*>(&data[14]) = 40;
+    *reinterpret_cast<int32_t*>(&data[18]) = width;
+    *reinterpret_cast<int32_t*>(&data[22]) = height;
+    *reinterpret_cast<int16_t*>(&data[26]) = 1;
+    *reinterpret_cast<int16_t*>(&data[28]) = 24;
+    for (int y = 0; y < height; ++y) {
+        unsigned char* row = &data[54 + y * row_stride];
+        for (int x = 0; x < width; ++x) {
+            unsigned char value = static_cast<unsigned char>((x + y) % 255);
+            row[x * 3 + 0] = value;
+            row[x * 3 + 1] = value;
+            row[x * 3 + 2] = value;
+        }
+    }
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+}
+
 class CountingTagger : public PhotoTagger {
 public:
     bool available() const override {
@@ -137,7 +176,7 @@ int main() {
         fs::remove(tag_db.wstring() + L"-wal");
         fs::remove(tag_db.wstring() + L"-shm");
 
-        write_file(tag_root / L"same.JPG", "image");
+        write_bmp(tag_root / L"same.JPG", 64, 64);
         {
             SQLitePhotoRepository repository(tag_db.wstring());
             repository.initialize();
@@ -196,10 +235,11 @@ int main() {
             assert(tagger.calls.load() == 2);
         }
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         fs::remove_all(queued_root);
-        fs::remove(queued_db);
-        fs::remove(queued_db.wstring() + L"-wal");
-        fs::remove(queued_db.wstring() + L"-shm");
+        remove_with_retry(queued_db);
+        remove_with_retry(queued_db.wstring() + L"-wal");
+        remove_with_retry(queued_db.wstring() + L"-shm");
         return 0;
     } catch (const std::exception& ex) {
         std::cerr << "PhotoServiceTests failed: " << ex.what() << "\n";

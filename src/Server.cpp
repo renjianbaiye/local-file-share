@@ -5,6 +5,7 @@
 #include "PhotoService.h"
 #include "PhotoTagger.h"
 #include "SQLitePhotoRepository.h"
+#include "TidyEngine.h"
 #include "httplib.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -491,6 +492,98 @@ static std::string folders_json(const std::vector<FolderRecord>& folders) {
     return out.str();
 }
 
+static std::string tidy_report_json(const TidyReport& report) {
+    std::ostringstream out;
+    out << "{"
+        << "\"total_photos\":" << report.total_photos
+        << ",\"total_similar_groups\":" << report.total_similar_groups
+        << ",\"total_delete_candidates\":" << report.total_delete_candidates
+        << ",\"total_review\":" << report.total_review
+        << ",\"total_keep\":" << report.total_keep
+        << ",\"groups_by_type\":" << report.groups_by_type_json
+        << ",\"missing_embeddings\":" << report.missing_embeddings
+        << ",\"skipped_photos\":" << report.skipped_photos
+        << ",\"average_group_size\":" << report.average_group_size
+        << ",\"estimated_reclaimable_count\":" << report.estimated_reclaimable_count
+        << ",\"conservative_mode\":" << bool_json(report.conservative_mode)
+        << ",\"delete_decision_uses_labels\":" << bool_json(report.delete_decision_uses_labels)
+        << ",\"tag_score_used\":" << bool_json(report.tag_score_used)
+        << ",\"embedding_based_grouping\":" << bool_json(report.embedding_based_grouping)
+        << ",\"hash_based_duplicate_detection\":" << bool_json(report.hash_based_duplicate_detection)
+        << ",\"quality_based_recommendation\":" << bool_json(report.quality_based_recommendation)
+        << "}";
+    return out.str();
+}
+
+static std::string similar_groups_json(const std::vector<SimilarGroupRecord>& groups) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < groups.size(); ++i) {
+        if (i != 0) out << ",";
+        const SimilarGroupRecord& group = groups[i];
+        out << "{"
+            << "\"id\":\"" << json_escape(group.group_id) << "\""
+            << ",\"similar_group_id\":\"" << json_escape(group.group_id) << "\""
+            << ",\"type\":\"" << json_escape(group.group_type) << "\""
+            << ",\"scene_id\":\"" << json_escape(group.scene_id) << "\""
+            << ",\"photo_count\":" << group.photos.size()
+            << ",\"cover_photo_id\":" << group.cover_photo_id
+            << ",\"best_photo_id\":" << group.best_photo_id
+            << ",\"confidence\":" << group.confidence
+            << ",\"reason\":\"" << json_escape(group.reason) << "\""
+            << ",\"recommended_keep\":" << group.keep_count
+            << ",\"delete_candidates\":" << group.delete_candidate_count
+            << ",\"summary\":{"
+            << "\"keep_count\":" << group.keep_count
+            << ",\"review_count\":" << group.review_count
+            << ",\"delete_candidate_count\":" << group.delete_candidate_count
+            << "},\"photos\":[";
+        for (size_t j = 0; j < group.photos.size(); ++j) {
+            if (j != 0) out << ",";
+            const SimilarGroupPhotoRecord& photo = group.photos[j];
+            out << "{"
+                << "\"photo_id\":" << photo.photo_id
+                << ",\"similarity_to_best\":" << photo.similarity_to_best
+                << ",\"similarity\":" << photo.similarity_to_best
+                << ",\"hash_distance_to_best\":" << photo.hash_distance_to_best
+                << ",\"quality_score\":" << photo.quality_score
+                << ",\"recommend\":\"" << json_escape(photo.recommendation) << "\""
+                << ",\"recommendation\":\"" << json_escape(photo.recommendation) << "\""
+                << ",\"reasons\":" << photo.reasons_json
+                << "}";
+        }
+        out << "]}";
+    }
+    out << "]";
+    return out.str();
+}
+
+static std::string delete_candidates_json(const std::vector<DeleteCandidateRecord>& candidates) {
+    std::ostringstream out;
+    out << "[";
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (i != 0) out << ",";
+        const DeleteCandidateRecord& candidate = candidates[i];
+        out << "{"
+            << "\"candidate_id\":\"" << json_escape(candidate.candidate_id) << "\""
+            << ",\"photo_id\":" << candidate.photo_id
+            << ",\"group_id\":\"" << json_escape(candidate.group_id) << "\""
+            << ",\"similar_group_id\":\"" << json_escape(candidate.group_id) << "\""
+            << ",\"matched_best_photo_id\":" << candidate.matched_best_photo_id
+            << ",\"similarity_to_best\":" << candidate.similarity_to_best
+            << ",\"quality_score\":" << candidate.quality_score
+            << ",\"best_quality_score\":" << candidate.best_quality_score
+            << ",\"safe_to_delete_score\":" << candidate.safe_to_delete_score
+            << ",\"reason\":\"" << json_escape(candidate.reason) << "\""
+            << ",\"requires_user_confirmation\":" << bool_json(candidate.requires_user_confirmation)
+            << ",\"recommended_action\":\"delete_candidate\""
+            << ",\"status\":\"" << json_escape(candidate.status) << "\""
+            << "}";
+    }
+    out << "]";
+    return out.str();
+}
+
 // ---------------------------------------------------------------------------
 // Server entry point
 // ---------------------------------------------------------------------------
@@ -683,6 +776,49 @@ int Server::run(const Options& options) {
     server.Get("/api/photos/folders", [&](const httplib::Request&, httplib::Response& res) {
         try {
             res.set_content(folders_json(photo_repository.listFolders()), "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Post("/api/photos/tidy/rebuild", [&](const httplib::Request&, httplib::Response& res) {
+        try {
+            TidyReport report = TidyEngine(photo_repository).rebuild();
+            res.set_content(tidy_report_json(report), "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Get("/api/photos/similar_groups", [&](const httplib::Request&, httplib::Response& res) {
+        try {
+            res.set_content(similar_groups_json(photo_repository.listSimilarGroups()), "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Get("/api/photos/delete_candidates", [&](const httplib::Request&, httplib::Response& res) {
+        try {
+            res.set_content(delete_candidates_json(photo_repository.listDeleteCandidates()), "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Post(R"(/api/photos/delete_candidates/([^/]+)/confirm)", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            photo_repository.updateDeleteCandidateStatus(req.matches[1], "confirmed");
+            res.set_content("{\"status\":\"confirmed\"}", "application/json; charset=utf-8");
+        } catch (const std::exception& ex) {
+            send_error(res, 500, ex.what());
+        }
+    });
+
+    server.Post(R"(/api/photos/delete_candidates/([^/]+)/reject)", [&](const httplib::Request& req, httplib::Response& res) {
+        try {
+            photo_repository.updateDeleteCandidateStatus(req.matches[1], "rejected");
+            res.set_content("{\"status\":\"rejected\"}", "application/json; charset=utf-8");
         } catch (const std::exception& ex) {
             send_error(res, 500, ex.what());
         }
@@ -912,6 +1048,11 @@ int Server::run(const Options& options) {
             if (req.has_param("path")) {
                 request_path = req.get_param_value("path");
             }
+            bool trigger_scan = true;
+            if (req.has_param("scan")) {
+                std::string scan_value = req.get_param_value("scan");
+                trigger_scan = scan_value != "0" && scan_value != "false";
+            }
 
             std::wstring target_dir = resolve_request_path(options.share_dir, request_path);
             if (!is_directory(target_dir)) {
@@ -971,7 +1112,9 @@ int Server::run(const Options& options) {
             if (!upload_ok) {
                 send_error(res, 500, error_msg.empty() ? "Upload failed" : error_msg);
             } else {
-                photo_service.startScanAsync();
+                if (trigger_scan) {
+                    photo_service.startScanAsync();
+                }
                 res.set_content("{\"status\":\"ok\"}", "application/json; charset=utf-8");
             }
         } catch (const std::exception& ex) {

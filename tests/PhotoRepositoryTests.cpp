@@ -22,12 +22,16 @@ int main() {
             SQLitePhotoRepository repository(db_path);
             repository.initialize();
 
-            assert(repository.schemaVersion() == 2);
+            assert(repository.schemaVersion() >= 3);
             assert(repository.hasTable("photos"));
             assert(repository.hasTable("folders"));
             assert(repository.hasTable("scan_runs"));
             assert(repository.hasTable("jobs"));
             assert(repository.hasTable("photo_tags"));
+            assert(repository.hasTable("photo_features"));
+            assert(repository.hasTable("similar_groups"));
+            assert(repository.hasTable("similar_group_photos"));
+            assert(repository.hasTable("delete_candidates"));
 
             PhotoRecord photo;
             photo.relative_path = "camera/DSC_0001.JPG";

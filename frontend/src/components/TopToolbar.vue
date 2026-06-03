@@ -4,33 +4,30 @@ import { useRouter } from 'vue-router'
 import { Search, Sparkles, LayoutGrid, LayoutList, Columns3, CheckSquare, X, RefreshCw } from '@lucide/vue'
 import { usePhotos } from '../composables/usePhotos.js'
 
-const emit = defineEmits(['search', 'viewChange'])
-const props = defineProps({
+defineProps({
   currentView: { type: String, default: 'masonry' },
   showViewSwitch: { type: Boolean, default: true },
 })
 
+const emit = defineEmits(['search', 'viewChange'])
 const router = useRouter()
 const searchQuery = ref('')
 const searchRef = ref(null)
 
 const views = [
-  { id: 'timeline', icon: LayoutList, label: '时间流' },
-  { id: 'masonry', icon: Columns3, label: '瀑布流' },
+  { id: 'timeline', icon: LayoutList, label: '时间' },
+  { id: 'masonry', icon: Columns3, label: '拼贴' },
   { id: 'grid', icon: LayoutGrid, label: '网格' },
 ]
 
-const { isSelectMode, toggleSelectMode, scan } = usePhotos()
+const { isSelectMode, toggleSelectMode, refreshPhotos, rebuildTidy, tidyRebuilding } = usePhotos()
 
-const onSearch = () => {
-  emit('search', searchQuery.value)
+const onSearch = () => emit('search', searchQuery.value)
+const focusSearch = () => searchRef.value?.focus()
+const goTidy = async () => {
+  await rebuildTidy()
+  router.push('/tidy')
 }
-
-const focusSearch = () => {
-  searchRef.value?.focus()
-}
-
-const goTidy = () => router.push('/tidy')
 
 defineExpose({ focusSearch })
 </script>
@@ -46,24 +43,22 @@ defineExpose({ focusSearch })
         placeholder="搜索人物、场景、标签..."
         @input="onSearch"
       />
-      <kbd class="search-hint">/</kbd>
     </label>
 
     <div class="toolbar-actions">
-      <button class="toolbar-btn" @click="scan" title="重新扫描并加载最新照片">
+      <button class="toolbar-btn icon-btn" @click="refreshPhotos" title="刷新相册">
         <RefreshCw :size="15" />
-        <span>刷新索引</span>
       </button>
 
-      <button class="toolbar-btn" :class="{ 'accent-btn': isSelectMode }" @click="toggleSelectMode">
+      <button class="toolbar-btn" :class="{ active: isSelectMode }" @click="toggleSelectMode">
         <CheckSquare v-if="!isSelectMode" :size="15" />
         <X v-else :size="15" />
-        <span>{{ isSelectMode ? '取消选择' : '选择' }}</span>
+        <span>{{ isSelectMode ? '完成' : '选择' }}</span>
       </button>
 
-      <button class="toolbar-btn accent-btn" @click="goTidy">
+      <button class="toolbar-btn primary-btn" :disabled="tidyRebuilding" @click="goTidy">
         <Sparkles :size="15" />
-        <span>智能整理</span>
+        <span>{{ tidyRebuilding ? '整理中' : '整理' }}</span>
       </button>
 
       <div v-if="showViewSwitch" class="view-switch">

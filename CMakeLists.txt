@@ -40,10 +40,14 @@ add_executable(LocalFileShare
     src/AppOptions.cpp
     src/FileManager.cpp
     src/HtmlRenderer.cpp
+    src/PerceptualHash.cpp
+    src/PhotoImage.cpp
+    src/PhotoQualityScorer.cpp
     src/PhotoTagger.cpp
     src/PhotoService.cpp
     src/Server.cpp
     src/SQLitePhotoRepository.cpp
+    src/TidyEngine.cpp
     third_party/qrcodegen.cpp
 )
 
@@ -52,7 +56,7 @@ target_include_directories(LocalFileShare PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
-target_link_libraries(LocalFileShare PRIVATE sqlite3)
+target_link_libraries(LocalFileShare PRIVATE sqlite3 gdiplus)
 
 if (LFS_ENABLE_ONNXRUNTIME)
     target_compile_definitions(LocalFileShare PRIVATE LFS_ENABLE_ONNXRUNTIME)
@@ -91,9 +95,13 @@ add_test(NAME PhotoRepositoryTests COMMAND PhotoRepositoryTests)
 add_executable(PhotoServiceTests
     tests/PhotoServiceTests.cpp
     src/PhotoService.cpp
+    src/PhotoTagger.cpp
     src/SQLitePhotoRepository.cpp
     src/FileManager.cpp
     src/HtmlRenderer.cpp
+    src/PerceptualHash.cpp
+    src/PhotoImage.cpp
+    src/PhotoQualityScorer.cpp
     third_party/qrcodegen.cpp
 )
 
@@ -102,9 +110,26 @@ target_include_directories(PhotoServiceTests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
-target_link_libraries(PhotoServiceTests PRIVATE sqlite3)
+target_link_libraries(PhotoServiceTests PRIVATE sqlite3 gdiplus)
 
 add_test(NAME PhotoServiceTests COMMAND PhotoServiceTests)
+
+add_executable(TidyEngineTests
+    tests/TidyEngineTests.cpp
+    src/TidyEngine.cpp
+    src/SQLitePhotoRepository.cpp
+    src/PerceptualHash.cpp
+    src/PhotoImage.cpp
+    src/PhotoQualityScorer.cpp
+)
+
+target_include_directories(TidyEngineTests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(TidyEngineTests PRIVATE sqlite3 gdiplus)
+
+add_test(NAME TidyEngineTests COMMAND TidyEngineTests)
 
 add_executable(AppOptionsTests
     tests/AppOptionsTests.cpp
